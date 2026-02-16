@@ -4,6 +4,7 @@ import { calculateRouteExposure } from "@/lib/pollution";
 import { redis } from "@/lib/redis";
 import { routeSchema } from "@/lib/validation";
 import { classifyAQI } from "@/lib/aqi";
+import { rateLimit } from "@/lib/rateLimit";
 
 export async function POST(req: Request) {
   try {
@@ -17,15 +18,23 @@ export async function POST(req: Request) {
     }
     const { origin, destination } = parsed.data;
 
+    // // Rate Limiting
+    // const ip = req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "unknown";
+    // const requestCount = await rateLimit(ip);
+    // if (requestCount > 20) {
+    //     return NextResponse.json(
+    //         { error: "Too many requests. Try again later." },
+    //         { status: 429 },
+    //     );
+    // }
+
     const round = (num: number) => Number(num.toFixed(4));
     const cacheKey = `route:${round(origin[0])}:${round(origin[1])}:${round(destination[0])}:${round(destination[1])}`;
     const cached = await redis.get(cacheKey);
     if (cached) {
-      console.log("CACHE HIT");
       return NextResponse.json(cached);
     }
 
-    console.time("ORS");
     // Call OpenRouteService
     const orsResponse = await fetch(
       "https://api.openrouteservice.org/v2/directions/driving-car/geojson",
@@ -47,7 +56,6 @@ export async function POST(req: Request) {
         }),
       },
     );
-    console.timeEnd("ORS");
 
     if (!orsResponse.ok) {
       return NextResponse.json(
@@ -57,12 +65,10 @@ export async function POST(req: Request) {
     }
 
     const data = await orsResponse.json();
-    console.log("Routes returned:", data.features.length);
 
     const routes = data.features;
 
     const exposureLabel = `EXPOSURE_${Date.now()}`;
-    console.time(exposureLabel);
     const results = await Promise.all(
       routes.map(async (feature: any) => {
         const distanceKm = feature.properties.summary.distance / 1000;
@@ -99,8 +105,6 @@ export async function POST(req: Request) {
       is_fastest: route === fastest,
       is_cleanest: route === cleanest,
     }));
-
-    console.timeEnd(exposureLabel);
 
     const responsePayload = {
       routes: enhancedResults,
