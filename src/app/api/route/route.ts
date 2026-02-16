@@ -35,9 +35,13 @@ export async function POST(req: Request) {
         },
         body: JSON.stringify({
           coordinates: [
-            [origin[1], origin[0]], // ORS expects [lng, lat]
+            [origin[1], origin[0]],
             [destination[1], destination[0]],
           ],
+          alternative_routes: {
+            target_count: 2,
+            share_factor: 0.6,
+          },
         }),
       },
     );
@@ -51,31 +55,35 @@ export async function POST(req: Request) {
     }
 
     const data = await orsResponse.json();
+    console.log("Routes returned:", data.features.length);
 
-    const route = data.features[0];
+    const routes = data.features;
 
-    const distanceKm = route.properties.summary.distance / 1000;
-    const durationMin = route.properties.summary.duration / 60;
+    const exposureLabel = `EXPOSURE_${Date.now()}`;
+    console.time(exposureLabel);
+    const results = await Promise.all(
+      routes.map(async (feature: any) => {
+        const distanceKm = feature.properties.summary.distance / 1000;
+        const durationMin = feature.properties.summary.duration / 60;
 
-    const geometry = route.geometry;
-    const coordinates = route.geometry.coordinates;
-    const sampledPoints = sampleRoutePoints(coordinates, 20);
+        const coordinates = feature.geometry.coordinates;
+        const sampledPoints = sampleRoutePoints(coordinates, 20);
 
-    console.time("DB_BATCH");
-    const exposure = await calculateRouteExposure(sampledPoints);
-    console.timeEnd("DB_BATCH");
+        const exposure = await calculateRouteExposure(sampledPoints);
 
-    // logs
-    console.log("Original:", coordinates.length);
-    console.log("Sampled:", sampledPoints.length);
+        return {
+          distance_km: Number(distanceKm.toFixed(2)),
+          duration_min: Number(durationMin.toFixed(2)),
+          exposure_score: Number(exposure.toFixed(2)),
+          route: feature.geometry,
+        };
+      }),
+    );
+    console.timeEnd(exposureLabel);
 
     const responsePayload = {
-      distance_km: Number(distanceKm.toFixed(2)),
-      duration_min: Number(durationMin.toFixed(2)),
-      exposure_score: Number(exposure.toFixed(2)),
-      route: geometry,
+      routes: results,
     };
-
     // Save to Redis (20 min TTL)
     await redis.set(cacheKey, responsePayload, {
       ex: 60 * 20,
