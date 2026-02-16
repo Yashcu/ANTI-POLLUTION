@@ -3,6 +3,7 @@ import { sampleRoutePoints } from "@/lib/sampling";
 import { calculateRouteExposure } from "@/lib/pollution";
 import { redis } from "@/lib/redis";
 import { routeSchema } from "@/lib/validation";
+import { classifyAQI } from "@/lib/aqi";
 
 export async function POST(req: Request) {
   try {
@@ -16,7 +17,8 @@ export async function POST(req: Request) {
     }
     const { origin, destination } = parsed.data;
 
-    const cacheKey = `route:${origin[0]}:${origin[1]}:${destination[0]}:${destination[1]}`;
+    const round = (num: number) => Number(num.toFixed(4));
+    const cacheKey = `route:${round(origin[0])}:${round(origin[1])}:${round(destination[0])}:${round(destination[1])}`;
     const cached = await redis.get(cacheKey);
     if (cached) {
       console.log("CACHE HIT");
@@ -75,14 +77,33 @@ export async function POST(req: Request) {
           distance_km: Number(distanceKm.toFixed(2)),
           duration_min: Number(durationMin.toFixed(2)),
           exposure_score: Number(exposure.toFixed(2)),
+          risk_level: classifyAQI(exposure),
           route: feature.geometry,
         };
       }),
     );
+
+    //Find fastest
+    const fastest = results.reduce((prev, curr) =>
+      curr.duration_min < prev.duration_min ? curr : prev,
+    );
+
+    // Find cleanest
+    const cleanest = results.reduce((prev, curr) =>
+      curr.exposure_score < prev.exposure_score ? curr : prev,
+    );
+
+    // Add flags
+    const enhancedResults = results.map((route) => ({
+      ...route,
+      is_fastest: route === fastest,
+      is_cleanest: route === cleanest,
+    }));
+
     console.timeEnd(exposureLabel);
 
     const responsePayload = {
-      routes: results,
+      routes: enhancedResults,
     };
     // Save to Redis (20 min TTL)
     await redis.set(cacheKey, responsePayload, {
