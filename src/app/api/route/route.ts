@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { sampleRoutePoints } from "@/lib/sampling";
 
 export async function POST(req: Request) {
   try {
@@ -46,11 +47,17 @@ export async function POST(req: Request) {
     const durationMin = route.properties.summary.duration / 60;
 
     const geometry = route.geometry;
+    const coordinates = route.geometry.coordinates;
+    const sampledPoints = sampleRoutePoints(coordinates, 20);
+
+    // logs
+    console.log("Original:", coordinates.length);
+    console.log("Sampled:", sampledPoints.length);
 
     return NextResponse.json({
-      distance_km: Number(distanceKm.toFixed(2)),
-      duration_min: Number(durationMin.toFixed(2)),
-      route: geometry,
+        distance_km: Number(distanceKm.toFixed(2)),
+        duration_min: Number(durationMin.toFixed(2)),
+        route: geometry,
     });
 
   } catch (error: any) {
