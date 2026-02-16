@@ -2,18 +2,19 @@ import { NextResponse } from "next/server";
 import { sampleRoutePoints } from "@/lib/sampling";
 import { calculateRouteExposure } from "@/lib/pollution";
 import { redis } from "@/lib/redis";
+import { routeSchema } from "@/lib/validation";
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
-    const { origin, destination } = body;
-
-    if (!origin || !destination) {
+    const parsed = routeSchema.safeParse(body);
+    if (!parsed.success) {
       return NextResponse.json(
-        { error: "Origin and destination required" },
+        { error: parsed.error.issues[0].message },
         { status: 400 },
       );
     }
+    const { origin, destination } = parsed.data;
 
     const cacheKey = `route:${origin[0]}:${origin[1]}:${destination[0]}:${destination[1]}`;
     const cached = await redis.get(cacheKey);
@@ -43,10 +44,9 @@ export async function POST(req: Request) {
     console.timeEnd("ORS");
 
     if (!orsResponse.ok) {
-      const errorText = await orsResponse.text();
       return NextResponse.json(
-        { error: errorText },
-        { status: orsResponse.status },
+        { error: "Routing service unavailable" },
+        { status: 502 },
       );
     }
 
