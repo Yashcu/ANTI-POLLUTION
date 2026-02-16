@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { sampleRoutePoints } from "@/lib/sampling";
+import { calculateRouteExposure, getNearestSensorPm25 } from "@/lib/pollution";
 
 export async function POST(req: Request) {
   try {
@@ -13,6 +14,7 @@ export async function POST(req: Request) {
       );
     }
 
+    console.time("ORS");
     // Call OpenRouteService
     const orsResponse = await fetch(
       "https://api.openrouteservice.org/v2/directions/driving-car/geojson",
@@ -30,6 +32,7 @@ export async function POST(req: Request) {
         }),
       }
     );
+    console.timeEnd("ORS");
 
     if (!orsResponse.ok) {
       const errorText = await orsResponse.text();
@@ -50,6 +53,10 @@ export async function POST(req: Request) {
     const coordinates = route.geometry.coordinates;
     const sampledPoints = sampleRoutePoints(coordinates, 20);
 
+    console.time("DB_BATCH");
+    const exposure = await calculateRouteExposure(sampledPoints);
+    console.timeEnd("DB_BATCH");
+
     // logs
     console.log("Original:", coordinates.length);
     console.log("Sampled:", sampledPoints.length);
@@ -57,6 +64,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
         distance_km: Number(distanceKm.toFixed(2)),
         duration_min: Number(durationMin.toFixed(2)),
+        exposure_score: Number(exposure.toFixed(2)),
         route: geometry,
     });
 
