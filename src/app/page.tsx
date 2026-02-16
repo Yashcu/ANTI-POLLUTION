@@ -1,66 +1,66 @@
-import Image from "next/image";
-import styles from "./page.module.css";
+"use client";
+
+import { useState } from "react";
+import dynamic from "next/dynamic";
+
+const MapWithRoute = dynamic(() => import("@/components/MapWithRoute"), {
+  ssr: false,
+});
 
 export default function Home() {
+  const [origin, setOrigin] = useState("28.6139,77.2090");
+  const [destination, setDestination] = useState("28.5355,77.3910");
+  const [route, setRoute] = useState<[number, number][]>([]);
+  const [result, setResult] = useState<any>(null);
+
+  const handleSubmit = async () => {
+    const originArr = origin.split(",").map(Number);
+    const destArr = destination.split(",").map(Number);
+
+    const res = await fetch("/api/route", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        origin: originArr,
+        destination: destArr,
+      }),
+    });
+
+    const data = await res.json();
+
+    if (data.route?.coordinates) {
+      const formatted = data.route.coordinates.map(
+        ([lng, lat]: [number, number]) => [lat, lng],
+      );
+      console.log("Formatted route:", formatted.slice(0, 3));
+      setRoute(formatted);
+    }
+
+    setResult(data);
+  };
+
   return (
-    <div className={styles.page}>
-      <main className={styles.main}>
-        <Image
-          className={styles.logo}
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <div style={{ padding: 20 }}>
+      <h1>Anti-Pollution Route Planner</h1>
+
+      <div>
+        <input value={origin} onChange={(e) => setOrigin(e.target.value)} />
+        <input
+          value={destination}
+          onChange={(e) => setDestination(e.target.value)}
         />
-        <div className={styles.intro}>
-          <h1>To get started, edit the page.tsx file.</h1>
-          <p>
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+        <button onClick={handleSubmit}>Get Route</button>
+      </div>
+
+      {result && (
+        <div>
+          <p>Distance: {result.distance_km} km</p>
+          <p>Duration: {result.duration_min} min</p>
+          <p>Exposure Score: {result.exposure_score}</p>
         </div>
-        <div className={styles.ctas}>
-          <a
-            className={styles.primary}
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className={styles.logo}
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className={styles.secondary}
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+      )}
+
+      <MapWithRoute route={route} />
     </div>
   );
 }
