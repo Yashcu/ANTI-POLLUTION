@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { sampleRoutePoints } from "@/lib/sampling";
-import { calculateRouteExposure, getNearestSensorPm25 } from "@/lib/pollution";
+import { calculateRouteExposure } from "@/lib/pollution";
+import { redis } from "@/lib/redis";
 
 export async function POST(req: Request) {
   try {
@@ -10,8 +11,15 @@ export async function POST(req: Request) {
     if (!origin || !destination) {
       return NextResponse.json(
         { error: "Origin and destination required" },
-        { status: 400 }
+        { status: 400 },
       );
+    }
+
+    const cacheKey = `route:${origin[0]}:${origin[1]}:${destination[0]}:${destination[1]}`;
+    const cached = await redis.get(cacheKey);
+    if (cached) {
+      console.log("CACHE HIT");
+      return NextResponse.json(cached);
     }
 
     console.time("ORS");
@@ -26,11 +34,11 @@ export async function POST(req: Request) {
         },
         body: JSON.stringify({
           coordinates: [
-            [origin[1], origin[0]],        // ORS expects [lng, lat]
+            [origin[1], origin[0]], // ORS expects [lng, lat]
             [destination[1], destination[0]],
           ],
         }),
-      }
+      },
     );
     console.timeEnd("ORS");
 
@@ -38,7 +46,7 @@ export async function POST(req: Request) {
       const errorText = await orsResponse.text();
       return NextResponse.json(
         { error: errorText },
-        { status: orsResponse.status }
+        { status: orsResponse.status },
       );
     }
 
@@ -61,17 +69,20 @@ export async function POST(req: Request) {
     console.log("Original:", coordinates.length);
     console.log("Sampled:", sampledPoints.length);
 
-    return NextResponse.json({
-        distance_km: Number(distanceKm.toFixed(2)),
-        duration_min: Number(durationMin.toFixed(2)),
-        exposure_score: Number(exposure.toFixed(2)),
-        route: geometry,
+    const responsePayload = {
+      distance_km: Number(distanceKm.toFixed(2)),
+      duration_min: Number(durationMin.toFixed(2)),
+      exposure_score: Number(exposure.toFixed(2)),
+      route: geometry,
+    };
+
+    // Save to Redis (20 min TTL)
+    await redis.set(cacheKey, responsePayload, {
+      ex: 60 * 20,
     });
 
+    return NextResponse.json(responsePayload);
   } catch (error: any) {
-    return NextResponse.json(
-      { error: error.message },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
