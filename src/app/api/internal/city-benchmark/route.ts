@@ -6,7 +6,7 @@ const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL!;
 export async function GET() {
     try {
 
-        const TOTAL = 20;
+        const TOTAL = 50;
         const BATCH_SIZE = 3;
         const DELAY_MS = 700;
 
@@ -97,6 +97,8 @@ export async function GET() {
 
         const successful = TOTAL - failureCount;
 
+        const ci95 = confidenceInterval95(results);
+
         return NextResponse.json({
             total_routes: TOTAL,
             successful_routes: TOTAL - failureCount,
@@ -109,6 +111,7 @@ export async function GET() {
             median_percentage_saved: median(results),
             max_percentage_saved: results.length > 0 ? Math.max(...results) : 0,
             avg_extra_distance_percent: avg(extraDistances),
+            ci95_percentage_saved: ci95
         });
     } catch (error: any) {
         return NextResponse.json(
@@ -116,4 +119,42 @@ export async function GET() {
             { status: 500 }
         );
     }
+}
+
+function standardDeviation(arr: number[]) {
+    const n = arr.length;
+    if (n < 2) return 0;
+
+    const mean =
+        arr.reduce((a, b) => a + b, 0) / n;
+
+    const variance =
+        arr.reduce((sum, value) =>
+            sum + Math.pow(value - mean, 2), 0
+        ) / (n - 1);
+
+    return Math.sqrt(variance);
+}
+
+function confidenceInterval95(arr: number[]) {
+    const n = arr.length;
+    if (n < 2) {
+        return { lower: 0, upper: 0 };
+    }
+
+    const mean =
+        arr.reduce((a, b) => a + b, 0) / n;
+
+    const stdDev = standardDeviation(arr);
+
+    const standardError =
+        stdDev / Math.sqrt(n);
+
+    const margin =
+        1.96 * standardError;
+
+    return {
+        lower: mean - margin,
+        upper: mean + margin,
+    };
 }

@@ -5,7 +5,7 @@ const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL!;
 
 export async function GET() {
     try {
-        const TOTAL = 20;          // keep small for dev
+        const TOTAL = 20;
         const BATCH_SIZE = 3;
         const DELAY_MS = 700;
 
