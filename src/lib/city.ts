@@ -15,3 +15,19 @@ export function isInsideChandigarh(lat: number, lng: number): boolean {
 }
 
 export const GRID_RESOLUTION_METERS = 500;
+
+export function randomPointInChandigarh(): [number, number] {
+    const lat =
+        CHANDIGARH_BOUNDARY.minLat +
+        Math.random() *
+        (CHANDIGARH_BOUNDARY.maxLat -
+            CHANDIGARH_BOUNDARY.minLat);
+
+    const lng =
+        CHANDIGARH_BOUNDARY.minLng +
+        Math.random() *
+        (CHANDIGARH_BOUNDARY.maxLng -
+            CHANDIGARH_BOUNDARY.minLng);
+
+    return [lat, lng];
+}

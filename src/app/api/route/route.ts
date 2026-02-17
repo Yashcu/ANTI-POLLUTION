@@ -76,7 +76,8 @@ export async function POST(req: Request) {
             target_count: 2,
             share_factor: 0.6,
           },
-        }),
+          extra_info: ["waytype"]
+        })
       },
     );
 
@@ -97,10 +98,27 @@ export async function POST(req: Request) {
         const distanceKm = feature.properties.summary.distance / 1000;
         const durationMin = feature.properties.summary.duration / 60;
 
-        const coordinates = feature.geometry.coordinates;
-        const sampledPoints = sampleRoutePoints(coordinates, 20);
+        const geometryCoords = feature.geometry.coordinates;
 
-        const { totalExposure, averagePollution } = await calculateRouteExposure(sampledPoints);
+        // Build waytype lookup aligned to geometry indices
+        const wayTypeLookup: number[] =
+          new Array(geometryCoords.length).fill(0);
+
+        const waytypeValues =
+          feature.properties.extras?.waytype?.values || [];
+
+        for (const [start, end, type] of waytypeValues) {
+          for (let i = start; i < end; i++) {
+            wayTypeLookup[i] = type;
+          }
+        }
+
+        const { totalExposure, averagePollution } =
+          await calculateRouteExposure(
+            geometryCoords,
+            wayTypeLookup
+          );
+
 
         return {
           distance_km: Number(distanceKm.toFixed(2)),
@@ -136,13 +154,6 @@ export async function POST(req: Request) {
       const score =
         route.distance_km +
         LAMBDA * normalizedExposure;
-
-      console.log("DEBUG ROUTE:", {
-        distance: route.distance_km,
-        exposure: route.exposure_score,
-        normalizedExposure,
-        score
-      });
 
       return {
         ...route,

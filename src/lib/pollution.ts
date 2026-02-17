@@ -1,4 +1,5 @@
 import { getPollutionGrid, getGridValueAt } from "./grid";
+import { getWayTypeMultiplier } from "./roadWeights";
 
 function haversineDistance(
   lat1: number,
@@ -25,17 +26,19 @@ function haversineDistance(
 }
 
 export async function calculateRouteExposure(
-  sampledPoints: number[][]
+  coordinates: number[][],
+  wayTypeLookup: number[]
 ): Promise<{ totalExposure: number; averagePollution: number }> {
-  
+
   const grid = await getPollutionGrid();
 
   let totalExposure = 0;
   let totalDistance = 0;
 
-  for (let i = 0; i < sampledPoints.length - 1; i++) {
-    const [lat1, lng1] = sampledPoints[i];
-    const [lat2, lng2] = sampledPoints[i + 1];
+  for (let i = 0; i < coordinates.length - 1; i++) {
+
+    const [lng1, lat1] = coordinates[i];
+    const [lng2, lat2] = coordinates[i + 1];
 
     const segmentDistance = haversineDistance(
       lat1,
@@ -50,11 +53,15 @@ export async function calculateRouteExposure(
       grid
     );
 
-    totalExposure += pollutionValue * segmentDistance;
+    const wayType = wayTypeLookup[i] || 0;
+    const multiplier = getWayTypeMultiplier(wayType);
+
+    totalExposure += pollutionValue * segmentDistance * multiplier;
     totalDistance += segmentDistance;
   }
 
-  const averagePollution = totalDistance > 0 ? totalExposure / totalDistance : 0;
+  const averagePollution =
+    totalDistance > 0 ? totalExposure / totalDistance : 0;
 
   return {
     totalExposure,
