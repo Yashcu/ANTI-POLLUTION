@@ -24,9 +24,9 @@ async function fetchRouteWithRetry(origin: number[], destination: number[]) {
 export async function GET() {
     try {
 
-        const TOTAL = 50;
+        const TOTAL = 80;
         const BATCH_SIZE = 1;
-        const DELAY_MS = 800;
+        const DELAY_MS = 1200;
 
         let divergenceCount = 0;
         let failureCount = 0;
