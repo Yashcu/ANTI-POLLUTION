@@ -101,29 +101,44 @@ export async function POST(req: Request) {
       }),
     );
 
-    //Find fastest
-    const fastest = results.reduce((prev, curr) =>
-      curr.duration_min < prev.duration_min ? curr : prev,
+    // Normalize exposure relative to routes
+    const maxExposure = Math.max(
+      ...results.map(r => r.exposure_score)
     );
 
-    // Find cleanest
-    const cleanest = results.reduce((prev, curr) =>
-      curr.exposure_score < prev.exposure_score ? curr : prev,
+    const minExposure = Math.min(
+      ...results.map(r => r.exposure_score)
     );
 
-    // Calculate pollution savings
-    const pollutionSaved = fastest.exposure_score - cleanest.exposure_score;
-    const percentageSaved = (pollutionSaved / fastest.exposure_score) * 100;
+    // Prevent divide by zero
+    const exposureRange = maxExposure - minExposure || 1;
+
+    // Lambda weight (tunable later)
+    const LAMBDA = 0.5;
+
+    // Compute composite score
+    const scoredRoutes = results.map(route => {
+      const normalizedExposure =
+        (route.exposure_score - minExposure) / exposureRange;
+
+      const score =
+        route.distance_km +
+        LAMBDA * normalizedExposure;
+
+      return {
+        ...route,
+        composite_score: Number(score.toFixed(4)),
+      };
+    });
+
+    const bestRoute = scoredRoutes.reduce((prev, curr) =>
+      curr.composite_score < prev.composite_score ? curr : prev
+    );
 
     // Add flags and tags
-    const enhancedResults = results.map((route) => ({
+    const enhancedResults = scoredRoutes.map(route => ({
       ...route,
-      is_fastest: route === fastest,
-      is_cleanest: route === cleanest,
-      // Only add this tag if it's the cleanest route AND it's actually cleaner than the fastest (by at least 5 units of exposure)
-      savings_tag: (route === cleanest && pollutionSaved > 5)
-        ? `${Math.round(percentageSaved)}% Less Toxic`
-        : null
+      is_selected: route === bestRoute
     }));
 
     const responsePayload = {
