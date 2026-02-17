@@ -24,61 +24,91 @@ function metersToLngDegrees(meters: number, lat: number): number {
 }
 
 export async function buildPollutionGrid() {
-    // 1️⃣ Get stations
-    const stations = await getChandigarhStations();
+    try {
+        const stations = await getChandigarhStations();
 
-    if (!stations || stations.length === 0) {
-        throw new Error("No stations available for grid generation");
-    }
+        if (!stations || stations.length === 0) {
+            throw new Error("No stations available");
+        }
 
-    const grid: GridCell[] = [];
+        const grid: GridCell[] = [];
 
-    const latStep = GRID_RESOLUTION_METERS / METERS_PER_DEGREE_LAT;
+        const latStep = GRID_RESOLUTION_METERS / METERS_PER_DEGREE_LAT;
 
-    // 2️⃣ Loop through latitude
-    for (
-        let lat = CHANDIGARH_BOUNDARY.minLat;
-        lat <= CHANDIGARH_BOUNDARY.maxLat;
-        lat += latStep
-    ) {
-        const lngStep = metersToLngDegrees(
-            GRID_RESOLUTION_METERS,
-            lat
-        );
-
-        // 3️⃣ Loop through longitude
         for (
-            let lng = CHANDIGARH_BOUNDARY.minLng;
-            lng <= CHANDIGARH_BOUNDARY.maxLng;
-            lng += lngStep
+            let lat = CHANDIGARH_BOUNDARY.minLat;
+            lat <= CHANDIGARH_BOUNDARY.maxLat;
+            lat += latStep
         ) {
-            const pollutionValue = estimatePollution(
-                lat,
-                lng,
-                stations
+            const lngStep = metersToLngDegrees(
+                GRID_RESOLUTION_METERS,
+                lat
             );
 
-            if (isNaN(pollutionValue)) {
-                throw new Error("Grid generation produced NaN value");
-            }
+            for (
+                let lng = CHANDIGARH_BOUNDARY.minLng;
+                lng <= CHANDIGARH_BOUNDARY.maxLng;
+                lng += lngStep
+            ) {
+                const pollutionValue = estimatePollution(
+                    lat,
+                    lng,
+                    stations
+                );
 
-            grid.push({
-                lat,
-                lng,
-                value: pollutionValue,
-            });
+                if (isNaN(pollutionValue)) {
+                    throw new Error("Interpolation produced NaN");
+                }
+
+                grid.push({
+                    lat,
+                    lng,
+                    value: pollutionValue,
+                });
+            }
         }
+
+        // Save new grid only if successful
+        await redis.set(GRID_KEY, grid);
+        await redis.set(GRID_TIMESTAMP_KEY, Date.now());
+        await redis.set(GRID_STATUS_KEY, "fresh");
+
+        return {
+            cellCount: grid.length,
+            status: "fresh",
+        };
+
+    } catch (error: any) {
+        console.error("Grid rebuild failed:", error.message);
+
+        // If rebuild fails, mark status degraded
+        await redis.set(GRID_STATUS_KEY, "degraded");
+
+        return {
+            error: error.message,
+            status: "degraded",
+        };
+    }
+}
+
+export async function getGridStatus() {
+    const timestamp = await redis.get<number>(GRID_TIMESTAMP_KEY);
+    const status = await redis.get<string>(GRID_STATUS_KEY);
+
+    if (!timestamp) {
+        return { status: "stale", ageMinutes: null };
     }
 
-    console.log("First cell:", grid[0]);
-    console.log("Last cell:", grid[grid.length - 1]);
+    const ageMs = Date.now() - timestamp;
+    const ageMinutes = ageMs / (1000 * 60);
 
-    // 4️⃣ Store in Redis
-    await redis.set(GRID_KEY, grid);
-    await redis.set(GRID_TIMESTAMP_KEY, Date.now());
-    await redis.set(GRID_STATUS_KEY, "fresh");
+    if (ageMinutes > 360) {
+        return { status: "stale", ageMinutes };
+    }
 
-    return {
-        cellCount: grid.length,
-    };
+    if (ageMinutes > 30) {
+        return { status: "degraded", ageMinutes };
+    }
+
+    return { status: status || "fresh", ageMinutes };
 }
