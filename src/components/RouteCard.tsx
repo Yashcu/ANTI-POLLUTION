@@ -1,6 +1,3 @@
-
-import React from "react";
-
 interface RouteCardProps {
     route: any;
     index: number;

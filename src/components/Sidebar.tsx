@@ -1,8 +1,4 @@
-import React from "react";
-
 import RouteCard from "./RouteCard";
-
-
 
 interface SidebarProps {
 

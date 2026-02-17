@@ -142,17 +142,6 @@ export async function getPollutionGrid(): Promise<GridData> {
     return grid;
 }
 
-function distanceSquared(
-    lat1: number,
-    lng1: number,
-    lat2: number,
-    lng2: number
-) {
-    const dLat = lat1 - lat2;
-    const dLng = lng1 - lng2;
-    return dLat * dLat + dLng * dLng;
-}
-
 export function getGridValueAt(
     lat: number,
     lng: number,

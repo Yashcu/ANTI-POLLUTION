@@ -1,10 +1,8 @@
 import { NextResponse } from "next/server";
-import { sampleRoutePoints } from "@/lib/sampling";
 import { calculateRouteExposure } from "@/lib/pollution";
 import { redis } from "@/lib/redis";
 import { routeSchema } from "@/lib/validation";
 import { classifyAQI } from "@/lib/aqi";
-import { rateLimit } from "@/lib/rateLimit";
 import { isInsideChandigarh } from "@/lib/city";
 import { getGridStatus } from "@/lib/grid";
 
@@ -92,7 +90,6 @@ export async function POST(req: Request) {
 
     const routes = data.features;
 
-    const exposureLabel = `EXPOSURE_${Date.now()}`;
     const results = await Promise.all(
       routes.map(async (feature: any) => {
         const distanceKm = feature.properties.summary.distance / 1000;

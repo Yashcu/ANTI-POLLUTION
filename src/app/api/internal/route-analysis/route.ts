@@ -1,62 +1,115 @@
 import { NextResponse } from "next/server";
-import { calculateRouteExposure } from "@/lib/pollution";
-import { sampleRoutePoints } from "@/lib/sampling";
+import { randomPointInChandigarh } from "@/lib/city";
 
-export async function POST(req: Request) {
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL!;
+
+export async function GET() {
     try {
-        const { routes } = await req.json();
+        const TOTAL = 20;          // keep small for dev
+        const BATCH_SIZE = 3;
+        const DELAY_MS = 700;
 
-        if (!Array.isArray(routes)) {
-            return NextResponse.json(
-                { error: "routes array required" },
-                { status: 400 }
-            );
-        }
+        let divergenceCount = 0;
+        let failureCount = 0;
 
-        const results = [];
+        const percentageSavings: number[] = [];
+        const extraDistancePercents: number[] = [];
 
-        for (const pair of routes) {
-            const { origin, destination } = pair;
+        const sleep = (ms: number) =>
+            new Promise(resolve => setTimeout(resolve, ms));
 
-            // Call your existing route API internally
-            const response = await fetch(
-                `${process.env.NEXT_PUBLIC_BASE_URL}/api/route`,
-                {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ origin, destination }),
+        for (let i = 0; i < TOTAL; i += BATCH_SIZE) {
+            const batchPromises = [];
+
+            for (let j = 0; j < BATCH_SIZE && i + j < TOTAL; j++) {
+                const origin = randomPointInChandigarh();
+                const destination = randomPointInChandigarh();
+
+                batchPromises.push(
+                    fetch(`${BASE_URL}/api/route`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ origin, destination }),
+                    })
+                        .then(async res => {
+                            if (!res.ok) {
+                                failureCount++;
+                                return null;
+                            }
+                            return res.json();
+                        })
+                        .catch(() => {
+                            failureCount++;
+                            return null;
+                        })
+                );
+            }
+
+            const batchResults = await Promise.all(batchPromises);
+
+            for (const data of batchResults) {
+                if (!data?.routes) continue;
+
+                const fastest = data.routes.reduce((prev: any, curr: any) =>
+                    curr.distance_km < prev.distance_km ? curr : prev
+                );
+
+                const selected = data.routes.find((r: any) => r.is_selected);
+                if (!selected) continue;
+
+                const pollutionSaved =
+                    fastest.exposure_score - selected.exposure_score;
+
+                if (pollutionSaved > 0) {
+                    divergenceCount++;
+
+                    const percentSaved =
+                        (pollutionSaved / fastest.exposure_score) * 100;
+
+                    percentageSavings.push(percentSaved);
+
+                    const extraDistancePercent =
+                        ((selected.distance_km - fastest.distance_km) /
+                            fastest.distance_km) *
+                        100;
+
+                    extraDistancePercents.push(extraDistancePercent);
                 }
-            );
+            }
 
-            const data = await response.json();
-
-            if (!data.routes) continue;
-
-            const fastest = data.routes.reduce((prev: any, curr: any) =>
-                curr.distance_km < prev.distance_km ? curr : prev
-            );
-
-            const selected = data.routes.find((r: any) => r.is_selected);
-
-            const pollutionSaved =
-                fastest.exposure_score - selected.exposure_score;
-
-            const percentageSaved =
-                fastest.exposure_score > 0
-                    ? (pollutionSaved / fastest.exposure_score) * 100
-                    : 0;
-
-            results.push({
-                origin,
-                destination,
-                fastest_exposure: fastest.exposure_score,
-                selected_exposure: selected.exposure_score,
-                pollution_saved: pollutionSaved,
-                percentage_saved: Number(percentageSaved.toFixed(2)),
-            });
+            await sleep(DELAY_MS);
         }
 
-        return NextResponse.json({ results });
+        const avg = (arr: number[]) =>
+            arr.length === 0
+                ? 0
+                : arr.reduce((a, b) => a + b, 0) / arr.length;
+
+        const median = (arr: number[]) => {
+            if (arr.length === 0) return 0;
+            const sorted = [...arr].sort((a, b) => a - b);
+            const mid = Math.floor(sorted.length / 2);
+            return sorted[mid];
+        };
+
+        const successful = TOTAL - failureCount;
+
+        return NextResponse.json({
+            total_routes: TOTAL,
+            successful_routes: successful,
+            failed_routes: failureCount,
+            divergence_rate:
+                successful > 0
+                    ? (divergenceCount / successful) * 100
+                    : 0,
+            avg_percentage_saved: avg(percentageSavings),
+            median_percentage_saved: median(percentageSavings),
+            max_percentage_saved:
+                percentageSavings.length > 0
+                    ? Math.max(...percentageSavings)
+                    : 0,
+            avg_extra_distance_percent: avg(extraDistancePercents),
+        });
 
     } catch (error: any) {
         return NextResponse.json(
