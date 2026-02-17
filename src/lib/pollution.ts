@@ -26,11 +26,11 @@ function haversineDistance(
 
 export async function calculateRouteExposure(
   sampledPoints: number[][]
-): Promise<number> {
-  console.log("Calculating exposure...");
+): Promise<{ totalExposure: number; averagePollution: number }> {
   const grid = await getPollutionGrid();
 
   let totalExposure = 0;
+  let totalDistance = 0;
 
   for (let i = 0; i < sampledPoints.length - 1; i++) {
     const [lat1, lng1] = sampledPoints[i];
@@ -50,7 +50,13 @@ export async function calculateRouteExposure(
     );
 
     totalExposure += pollutionValue * segmentDistance;
+    totalDistance += segmentDistance;
   }
 
-  return totalExposure;
+  const averagePollution = totalDistance > 0 ? totalExposure / totalDistance : 0;
+
+  return {
+    totalExposure,
+    averagePollution
+  };
 }

@@ -88,13 +88,14 @@ export async function POST(req: Request) {
         const coordinates = feature.geometry.coordinates;
         const sampledPoints = sampleRoutePoints(coordinates, 20);
 
-        const exposure = await calculateRouteExposure(sampledPoints);
+        const { totalExposure, averagePollution } = await calculateRouteExposure(sampledPoints);
 
         return {
           distance_km: Number(distanceKm.toFixed(2)),
           duration_min: Number(durationMin.toFixed(2)),
-          exposure_score: Number(exposure.toFixed(2)),
-          risk_level: classifyAQI(exposure),
+          exposure_score: Number(totalExposure.toFixed(2)),
+          average_pollution: Number(averagePollution.toFixed(2)),
+          risk_level: classifyAQI(averagePollution),
           route: feature.geometry,
         };
       }),
