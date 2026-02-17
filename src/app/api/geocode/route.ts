@@ -10,14 +10,15 @@ export async function POST(req: Request) {
                 { status: 400 }
             );
         }
+        const structuredQuery = `${query}, Chandigarh, India`;
 
         const response = await fetch(
             `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
-                query
-            )}&limit=5`,
+                structuredQuery
+            )}&limit=5&countrycodes=in&viewbox=76.75,30.78,76.85,30.65&bounded=1`,
             {
                 headers: {
-                    "User-Agent": "EcoRouteApp/1.0 (your@email.com)",
+                    "User-Agent": "EcoRouteApp/1.0 (your@gmail.com)",
                 },
             }
         );
@@ -33,7 +34,7 @@ export async function POST(req: Request) {
 
         if (!data || data.length === 0) {
             return NextResponse.json(
-                { error: "Location not found" },
+                { error: "Location not found within Chandigarh city limits" },
                 { status: 404 }
             );
         }

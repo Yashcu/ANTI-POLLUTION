@@ -3,6 +3,10 @@
 import { useState } from "react";
 import dynamic from "next/dynamic";
 import Sidebar from "@/components/Sidebar";
+import { GridMeta, RouteModel } from "@/types/route";
+import { geocode, fetchRoutes } from "@/lib/api";
+
+type Status = "idle" | "loading" | "success" | "error";
 
 const MapWithRoute = dynamic(() => import("@/components/MapWithRoute"), {
   ssr: false,
@@ -14,105 +18,82 @@ const MapWithRoute = dynamic(() => import("@/components/MapWithRoute"), {
 });
 
 export default function Home() {
-  const [origin, setOrigin] = useState("Delhi Airport");
-  const [destination, setDestination] = useState("Noida Sector 18");
-  const [routes, setRoutes] = useState<any[]>([]);
-  const [selectedIndex, setSelectedIndex] = useState<number>(0);
-  const [loading, setLoading] = useState(false);
+  const [origin, setOrigin] = useState("Sector 17");
+  const [destination, setDestination] = useState("Sector 22");
+
+  const [routes, setRoutes] = useState<RouteModel[]>([]);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [gridMeta, setGridMeta] = useState<GridMeta | null>(null);
+
+  const [status, setStatus] = useState<Status>("idle");
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async () => {
     try {
-      setLoading(true);
+      setStatus("loading");
+      setError(null);
 
-      // 1. Geocode origin
-      const originRes = await fetch("/api/geocode", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: origin }),
-      });
+      const originData = await geocode(origin);
+      const destData = await geocode(destination);
 
-      const originData = await originRes.json();
+      // Validate region
+      const isOriginChandigarh = originData.label?.toLowerCase().includes("chandigarh");
+      const isDestChandigarh = destData.label?.toLowerCase().includes("chandigarh");
 
-      if (!originRes.ok) {
-        alert(originData.error);
-        setLoading(false);
+      if (!isOriginChandigarh || !isDestChandigarh) {
+        setStatus("error");
+        setError("Routing currently supported only inside Chandigarh.");
         return;
       }
 
-      // 2. Geocode destination
-      const destRes = await fetch("/api/geocode", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: destination }),
-      });
+      const response = await fetchRoutes(
+        [originData.lat, originData.lng],
+        [destData.lat, destData.lng]
+      );
 
-      const destData = await destRes.json();
-
-      if (!destRes.ok) {
-        alert(destData.error);
-        setLoading(false);
-        return;
+      if (!response.routes.length) {
+        throw new Error("No routes found.");
       }
 
-      // 3. Call route API with coordinates
-      const routeRes = await fetch("/api/route", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          origin: [originData.lat, originData.lng],
-          destination: [destData.lat, destData.lng],
-        }),
-      });
+      setRoutes(response.routes);
+      setGridMeta(response.grid_meta);
 
-      const routeData = await routeRes.json();
+      const selected = response.routes.findIndex((r) => r.is_selected);
+      setSelectedIndex(selected >= 0 ? selected : 0);
 
-      if (routeData.routes) {
-        setRoutes(routeData.routes);
-        setSelectedIndex(0);
-      }
-
-      setLoading(false);
+      setStatus("success");
     } catch (err) {
-      console.error(err);
-      setLoading(false);
+      setStatus("error");
+      setError(err instanceof Error ? err.message : "Unknown error");
     }
   };
 
-  const selectedRoute = routes[selectedIndex];
 
-  const mapRoute =
-    selectedRoute?.route?.coordinates?.map(([lng, lat]: [number, number]) => [
-      lat,
-      lng,
-    ]) || [];
 
-  // Helper to determine route color based on risk level
-  const getRouteColor = (riskLevel: string) => {
-    switch (riskLevel) {
-      case "Good":
-        return "#22c55e"; // Green-500
-      case "Moderate":
-        return "#eab308"; // Yellow-500
-      case "Unhealthy for Sensitive Groups":
-        return "#f97316"; // Orange-500
-      case "Unhealthy":
-      case "Very Unhealthy":
-        return "#ef4444"; // Red-500
-      default:
-        return "#6366f1"; // Indigo-500 (Default)
-    }
-  };
+  const fastestRoute = routes.find((r) => r.is_fastest);
+  const cleanestRoute = routes.find((r) => r.is_selected);
 
-  const routeColor = selectedRoute ? getRouteColor(selectedRoute.risk_level) : "#6366f1";
+  let exposureSavedPercent: number | null = null;
+  let extraDistancePercent: number | null = null;
+
+  if (fastestRoute && cleanestRoute && fastestRoute !== cleanestRoute) {
+    exposureSavedPercent =
+      ((fastestRoute.exposure_score - cleanestRoute.exposure_score) /
+        fastestRoute.exposure_score) *
+      100;
+
+    extraDistancePercent =
+      ((cleanestRoute.distance_km - fastestRoute.distance_km) /
+        fastestRoute.distance_km) *
+      100;
+  }
 
   return (
     <div className="relative h-screen w-full overflow-hidden bg-slate-50">
-      {/* Map Area - Full Screen Background */}
       <div className="absolute inset-0 z-0">
-        <MapWithRoute route={mapRoute} color={routeColor} />
+        <MapWithRoute routes={routes} selectedIndex={selectedIndex} />
       </div>
 
-      {/* Sidebar - Floating Panel */}
       <Sidebar
         origin={origin}
         setOrigin={setOrigin}
@@ -122,9 +103,12 @@ export default function Home() {
         routes={routes}
         selectedIndex={selectedIndex}
         setSelectedIndex={setSelectedIndex}
-        loading={loading}
+        loading={status === "loading"}
+        error={error}
+        exposureSavedPercent={exposureSavedPercent}
+        extraDistancePercent={extraDistancePercent}
+        gridMeta={gridMeta}
       />
     </div>
   );
 }
-

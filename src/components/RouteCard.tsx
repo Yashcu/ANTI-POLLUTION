@@ -1,11 +1,14 @@
+import { RouteModel } from "@/types/route";
+
 interface RouteCardProps {
-    route: any;
+    route: RouteModel;
     index: number;
     isSelected: boolean;
     onClick: () => void;
+    showDebug?: boolean;
 }
 
-export default function RouteCard({ route, index, isSelected, onClick }: RouteCardProps) {
+export default function RouteCard({ route, index, isSelected, onClick, showDebug = false }: RouteCardProps) {
     // Dynamic AQI Styling Logic
     const getAqiAttributes = (aqi: number) => {
         if (aqi <= 50) return {
@@ -30,7 +33,7 @@ export default function RouteCard({ route, index, isSelected, onClick }: RouteCa
         };
     };
 
-    const styles = getAqiAttributes(route.exposure_score);
+    const styles = getAqiAttributes(route.average_pollution);
 
     return (
         <div
@@ -50,21 +53,17 @@ export default function RouteCard({ route, index, isSelected, onClick }: RouteCa
                         {Math.round(route.duration_min)} <span className="text-sm font-semibold text-slate-400">min</span>
                     </span>
 
-                    <div className="flex gap-2">
-                        {/* CO2 Savings Badge (Cleanest) - Dynamic "Less Toxic" Tag */}
-                        {route.savings_tag && (
-                            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-100/50 border border-emerald-100">
-                                <svg className="w-3.5 h-3.5 text-emerald-600" fill="currentColor" viewBox="0 0 24 24"><path d="M17,8C8,10,5.9,16.17,3.82,21.34L5.71,22l1-2.3A4.49,4.49,0,0,0,8,20C19,20,22,3,22,3,21,5,14,5.25,9,6.25S2,11.5,2,13.5a6.22,6.22,0,0,0,1.75,4.25C6,9.5,17,8,17,8Z" /></svg>
-                                <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wide">{route.savings_tag}</span>
-                            </div>
-                        )}
-                        {/* Fastest Badge */}
-                        {route.is_fastest && (
-                            <span className="inline-flex items-center px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider bg-slate-900 text-white shadow-sm">
-                                Fastest
-                            </span>
-                        )}
-                    </div>
+                    {route.is_fastest && (
+                        <span className="text-xs font-semibold text-slate-500">
+                            Fastest
+                        </span>
+                    )}
+
+                    {route.is_selected && !route.is_fastest && (
+                        <span className="text-xs font-semibold text-emerald-600">
+                            Cleanest
+                        </span>
+                    )}
                 </div>
 
                 {/* Bottom Row: Distance • AQI */}
@@ -73,11 +72,21 @@ export default function RouteCard({ route, index, isSelected, onClick }: RouteCa
                     <span className="text-slate-300">•</span>
 
                     {/* AQI Dot Badge */}
-                    <div className="flex items-center gap-1.5">
-                        <div className={`w-2 h-2 rounded-full ${styles.dot}`}></div>
-                        <span className="text-slate-600">
-                            AQI {Math.round(route.exposure_score)}
-                        </span>
+                    <div className="flex flex-col items-end">
+                        <div className="flex items-center gap-1.5">
+                            <div className={`w-2 h-2 rounded-full ${styles.dot}`}></div>
+                            <span className="text-slate-600">
+                                AQI {Math.round(route.average_pollution)}
+                            </span>
+                        </div>
+                        <div className="text-[11px] text-slate-400 mt-1">
+                            {route.risk_level}
+                        </div>
+                        {showDebug && (
+                            <div className="text-[11px] text-slate-400 mt-0.5">
+                                Score: {route.composite_score.toFixed(3)}
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
