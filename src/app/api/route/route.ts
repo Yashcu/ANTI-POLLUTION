@@ -6,6 +6,7 @@ import { routeSchema } from "@/lib/validation";
 import { classifyAQI } from "@/lib/aqi";
 import { rateLimit } from "@/lib/rateLimit";
 import { isInsideChandigarh } from "@/lib/city";
+import { getGridStatus } from "@/lib/grid";
 
 export async function POST(req: Request) {
   try {
@@ -18,6 +19,7 @@ export async function POST(req: Request) {
       );
     }
     const { origin, destination } = parsed.data;
+    const gridStatus = await getGridStatus();
 
     if (
       !isInsideChandigarh(origin[0], origin[1]) ||
@@ -26,6 +28,16 @@ export async function POST(req: Request) {
       return NextResponse.json(
         { error: "Routing supported only within Chandigarh city limits" },
         { status: 400 }
+      );
+    }
+
+    if (gridStatus.status === "stale") {
+      return NextResponse.json(
+        {
+          error: "Pollution data unavailable or stale",
+          grid_status: gridStatus
+        },
+        { status: 503 }
       );
     }
 
@@ -143,6 +155,7 @@ export async function POST(req: Request) {
 
     const responsePayload = {
       routes: enhancedResults,
+      grid_status: gridStatus,
     };
     // Save to Redis (20 min TTL)
     await redis.set(cacheKey, responsePayload, {
