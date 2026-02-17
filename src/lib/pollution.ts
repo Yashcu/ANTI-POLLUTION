@@ -1,4 +1,4 @@
-import { getPollutionGrid, findNearestGridValue } from "./grid";
+import { getPollutionGrid, getGridValueAt } from "./grid";
 
 function haversineDistance(
   lat1: number,
@@ -27,6 +27,7 @@ function haversineDistance(
 export async function calculateRouteExposure(
   sampledPoints: number[][]
 ): Promise<{ totalExposure: number; averagePollution: number }> {
+  
   const grid = await getPollutionGrid();
 
   let totalExposure = 0;
@@ -43,7 +44,7 @@ export async function calculateRouteExposure(
       lng2
     );
 
-    const pollutionValue = findNearestGridValue(
+    const pollutionValue = getGridValueAt(
       lat1,
       lng1,
       grid

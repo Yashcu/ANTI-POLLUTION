@@ -9,6 +9,14 @@ export type GridCell = {
     value: number;
 };
 
+export type GridData = {
+    cells: GridCell[][];
+    latStep: number;
+    lngStep: number;
+    rows: number;
+    cols: number;
+};
+
 const GRID_KEY = "grid:chandigarh:data";
 const GRID_TIMESTAMP_KEY = "grid:chandigarh:timestamp";
 const GRID_STATUS_KEY = "grid:chandigarh:status";
@@ -31,57 +39,67 @@ export async function buildPollutionGrid() {
             throw new Error("No stations available");
         }
 
-        const grid: GridCell[] = [];
-
         const latStep = GRID_RESOLUTION_METERS / METERS_PER_DEGREE_LAT;
 
-        for (
-            let lat = CHANDIGARH_BOUNDARY.minLat;
-            lat <= CHANDIGARH_BOUNDARY.maxLat;
-            lat += latStep
-        ) {
+        const rows = Math.ceil(
+            (CHANDIGARH_BOUNDARY.maxLat - CHANDIGARH_BOUNDARY.minLat) / latStep
+        );
+
+        const cells: GridCell[][] = [];
+
+        for (let row = 0; row < rows; row++) {
+            const lat =
+                CHANDIGARH_BOUNDARY.minLat + row * latStep;
+
             const lngStep = metersToLngDegrees(
                 GRID_RESOLUTION_METERS,
                 lat
             );
 
-            for (
-                let lng = CHANDIGARH_BOUNDARY.minLng;
-                lng <= CHANDIGARH_BOUNDARY.maxLng;
-                lng += lngStep
-            ) {
+            const cols = Math.ceil(
+                (CHANDIGARH_BOUNDARY.maxLng - CHANDIGARH_BOUNDARY.minLng) / lngStep
+            );
+
+            const rowCells: GridCell[] = [];
+
+            for (let col = 0; col < cols; col++) {
+                const lng =
+                    CHANDIGARH_BOUNDARY.minLng + col * lngStep;
+
                 const pollutionValue = estimatePollution(
                     lat,
                     lng,
                     stations
                 );
 
-                if (isNaN(pollutionValue)) {
-                    throw new Error("Interpolation produced NaN");
-                }
-
-                grid.push({
+                rowCells.push({
                     lat,
                     lng,
                     value: pollutionValue,
                 });
             }
+
+            cells.push(rowCells);
         }
 
-        // Save new grid only if successful
-        await redis.set(GRID_KEY, grid);
+        const gridData: GridData = {
+            cells,
+            latStep,
+            lngStep: GRID_RESOLUTION_METERS / METERS_PER_DEGREE_LAT, // approx
+            rows: cells.length,
+            cols: cells[0].length,
+        };
+
+        await redis.set(GRID_KEY, gridData);
         await redis.set(GRID_TIMESTAMP_KEY, Date.now());
         await redis.set(GRID_STATUS_KEY, "fresh");
 
         return {
-            cellCount: grid.length,
+            cellCount: rows * cells[0].length,
             status: "fresh",
         };
 
     } catch (error: any) {
-        console.error("Grid rebuild failed:", error.message);
-
-        // If rebuild fails, mark status degraded
         await redis.set(GRID_STATUS_KEY, "degraded");
 
         return {
@@ -90,6 +108,7 @@ export async function buildPollutionGrid() {
         };
     }
 }
+
 
 export async function getGridStatus() {
     const timestamp = await redis.get<number>(GRID_TIMESTAMP_KEY);
@@ -113,8 +132,8 @@ export async function getGridStatus() {
     return { status: status || "fresh", ageMinutes };
 }
 
-export async function getPollutionGrid(): Promise<GridCell[]> {
-    const grid = await redis.get<GridCell[]>(GRID_KEY);
+export async function getPollutionGrid(): Promise<GridData> {
+    const grid = await redis.get<GridData>(GRID_KEY);
 
     if (!grid) {
         throw new Error("Pollution grid not initialized");
@@ -134,22 +153,34 @@ function distanceSquared(
     return dLat * dLat + dLng * dLng;
 }
 
-export function findNearestGridValue(
+export function getGridValueAt(
     lat: number,
     lng: number,
-    grid: GridCell[]
+    grid: GridData
 ): number {
-    let minDist = Infinity;
-    let nearestValue = 0;
+    const { cells, latStep, rows, cols } = grid;
 
-    for (const cell of grid) {
-        const dist = distanceSquared(lat, lng, cell.lat, cell.lng);
+    const row = Math.floor(
+        (lat - CHANDIGARH_BOUNDARY.minLat) / latStep
+    );
 
-        if (dist < minDist) {
-            minDist = dist;
-            nearestValue = cell.value;
-        }
+    if (row < 0 || row >= rows) {
+        return 0;
     }
 
-    return nearestValue;
+    const lngStep = metersToLngDegrees(
+        GRID_RESOLUTION_METERS,
+        lat
+    );
+
+    const col = Math.floor(
+        (lng - CHANDIGARH_BOUNDARY.minLng) / lngStep
+    );
+
+    if (col < 0 || col >= cols) {
+        return 0;
+    }
+
+    return cells[row][col].value;
 }
+
