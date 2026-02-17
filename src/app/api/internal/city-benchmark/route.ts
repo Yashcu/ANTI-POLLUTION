@@ -3,12 +3,30 @@ import { randomPointInChandigarh } from "@/lib/city";
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL!;
 
+async function fetchRouteWithRetry(origin: number[], destination: number[]) {
+    for (let i = 0; i < 2; i++) {
+        try {
+            const res = await fetch(`${BASE_URL}/api/route`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ origin, destination }),
+            });
+
+            if (res.ok) return res.json();
+        } catch { }
+
+        await new Promise(r => setTimeout(r, 500));
+    }
+
+    return null;
+}
+
 export async function GET() {
     try {
 
         const TOTAL = 50;
-        const BATCH_SIZE = 3;
-        const DELAY_MS = 700;
+        const BATCH_SIZE = 1;
+        const DELAY_MS = 800;
 
         let divergenceCount = 0;
         let failureCount = 0;
@@ -28,21 +46,10 @@ export async function GET() {
                 const destination = randomPointInChandigarh();
 
                 batchPromises.push(
-                    fetch(`${BASE_URL}/api/route`, {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ origin, destination }),
-                    })
-                        .then(async res => {
-                            if (!res.ok) {
-                                failureCount++;
-                                return null;
-                            }
-                            return res.json();
-                        })
-                        .catch(() => {
-                            failureCount++;
-                            return null;
+                    fetchRouteWithRetry(origin, destination)
+                        .then(data => {
+                            if (!data) failureCount++;
+                            return data;
                         })
                 );
             }
@@ -101,7 +108,7 @@ export async function GET() {
 
         return NextResponse.json({
             total_routes: TOTAL,
-            successful_routes: TOTAL - failureCount,
+            successful_routes: successful,
             failed_routes: failureCount,
             divergence_rate:
                 successful > 0
@@ -109,9 +116,12 @@ export async function GET() {
                     : 0,
             avg_percentage_saved: avg(results),
             median_percentage_saved: median(results),
-            max_percentage_saved: results.length > 0 ? Math.max(...results) : 0,
+            max_percentage_saved:
+                results.length > 0 ? Math.max(...results) : 0,
             avg_extra_distance_percent: avg(extraDistances),
-            ci95_percentage_saved: ci95
+
+            ci95_percentage_saved: ci95,
+            raw_percentage_saved: results
         });
     } catch (error: any) {
         return NextResponse.json(

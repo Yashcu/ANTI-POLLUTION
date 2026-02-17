@@ -6,6 +6,55 @@ import { classifyAQI } from "@/lib/aqi";
 import { isInsideChandigarh } from "@/lib/city";
 import { getGridStatus } from "@/lib/grid";
 
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit,
+  timeoutMs: number
+) {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    return response;
+  } finally {
+    clearTimeout(id);
+  }
+}
+
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  retries = 3
+) {
+  let attempt = 0;
+
+  while (attempt <= retries) {
+    try {
+      const response = await fetchWithTimeout(url, options, 8000);
+
+      if (response.ok) return response;
+
+      if (response.status >= 500) {
+        throw new Error("Server error");
+      }
+
+      return response; // 4xx should not retry
+    } catch (error) {
+      if (attempt === retries) throw error;
+
+      const backoff = Math.pow(2, attempt) * 300;
+      await new Promise(res => setTimeout(res, backoff));
+      attempt++;
+    }
+  }
+
+  throw new Error("Retry failed");
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -57,7 +106,7 @@ export async function POST(req: Request) {
     }
 
     // Call OpenRouteService
-    const orsResponse = await fetch(
+    const orsResponse = await fetchWithRetry(
       "https://api.openrouteservice.org/v2/directions/driving-car/geojson",
       {
         method: "POST",
@@ -76,7 +125,7 @@ export async function POST(req: Request) {
           },
           extra_info: ["waytype"]
         })
-      },
+      }
     );
 
     if (!orsResponse.ok) {
@@ -141,7 +190,7 @@ export async function POST(req: Request) {
     const exposureRange = maxExposure - minExposure || 1;
 
     // Lambda weight (tunable later)
-    const LAMBDA = 3;
+    const LAMBDA = 2;
 
     // Compute composite score
     const scoredRoutes = results.map(route => {
