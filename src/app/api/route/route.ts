@@ -126,7 +126,7 @@ export async function POST(req: Request) {
     const exposureRange = maxExposure - minExposure || 1;
 
     // Lambda weight (tunable later)
-    const LAMBDA = 0.5;
+    const LAMBDA = 3;
 
     // Compute composite score
     const scoredRoutes = results.map(route => {
@@ -136,6 +136,13 @@ export async function POST(req: Request) {
       const score =
         route.distance_km +
         LAMBDA * normalizedExposure;
+
+      console.log("DEBUG ROUTE:", {
+        distance: route.distance_km,
+        exposure: route.exposure_score,
+        normalizedExposure,
+        score
+      });
 
       return {
         ...route,
