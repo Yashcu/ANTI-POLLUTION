@@ -9,94 +9,79 @@ interface RouteCardProps {
 }
 
 export default function RouteCard({ route, index, isSelected, onClick }: RouteCardProps) {
-    const getRiskColor = (level: string) => {
-        switch (level) {
-            case "Unhealthy":
-                return "bg-rose-500";
-            case "Unhealthy for Sensitive Groups":
-                return "bg-orange-500";
-            default:
-                return "bg-emerald-500";
-        }
+    // Dynamic AQI Styling Logic
+    const getAqiAttributes = (aqi: number) => {
+        if (aqi <= 50) return {
+            dot: "bg-emerald-500",
+            selectedBg: "bg-emerald-50/80",
+            text: "text-emerald-700"
+        };
+        if (aqi <= 100) return {
+            dot: "bg-yellow-500",
+            selectedBg: "bg-yellow-50/80",
+            text: "text-yellow-700"
+        };
+        if (aqi <= 150) return {
+            dot: "bg-orange-500",
+            selectedBg: "bg-orange-50/80",
+            text: "text-orange-700"
+        };
+        return {
+            dot: "bg-rose-500",
+            selectedBg: "bg-rose-50/80",
+            text: "text-rose-700"
+        };
     };
 
-    const getRiskTextColor = (level: string) => {
-        switch (level) {
-            case "Unhealthy":
-                return "text-rose-700";
-            case "Unhealthy for Sensitive Groups":
-                return "text-orange-700";
-            default:
-                return "text-emerald-700";
-        }
-    };
-
-    const getRiskBadgeColor = (level: string) => {
-        switch (level) {
-            case "Unhealthy":
-                return "bg-rose-50";
-            case "Unhealthy for Sensitive Groups":
-                return "bg-orange-50";
-            default:
-                return "bg-emerald-50";
-        }
-    };
+    const styles = getAqiAttributes(route.exposure_score);
 
     return (
         <div
             onClick={onClick}
             className={`
-        cursor-pointer rounded-2xl border p-5 transition-all duration-300 ease-out group
-        ${isSelected
-                    ? "border-indigo-500 bg-white shadow-xl shadow-indigo-500/10 ring-2 ring-indigo-500/20 transform scale-[1.02]"
-                    : "border-slate-100 bg-white hover:border-indigo-200 hover:shadow-lg hover:shadow-slate-200/50 hover:scale-[1.01]"
+                cursor-pointer p-4 transition-all duration-200 ease-out group relative border-b border-slate-100 last:border-none
+                ${isSelected
+                    ? styles.selectedBg
+                    : "bg-transparent hover:bg-slate-50"
                 }
-      `}
+            `}
         >
-            {/* Top Header */}
-            <div className="flex items-center justify-between mb-4">
-                <h3 className={`text-xs font-bold uppercase tracking-wider ${isSelected ? "text-indigo-600" : "text-slate-400 group-hover:text-indigo-500/70"}`}>
-                    Option {index + 1}
-                </h3>
-                <div className="flex gap-2">
-                    {route.is_fastest && (
-                        <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700 border border-emerald-100">
-                            FASTEST
-                        </span>
-                    )}
-                    {route.is_cleanest && (
-                        <span className="inline-flex items-center rounded-full bg-violet-50 px-2.5 py-1 text-[11px] font-bold text-violet-700 border border-violet-100">
-                            CLEANEST
-                        </span>
-                    )}
-                </div>
-            </div>
-
-            {/* Main Stats */}
-            <div className="flex items-baseline gap-3 mb-5">
-                <span className="text-3xl font-extrabold text-slate-800 tracking-tight">
-                    {route.duration_min} <span className="text-sm font-semibold text-slate-400 -ml-1">min</span>
-                </span>
-                <span className="h-4 w-px bg-slate-200"></span>
-                <span className="text-sm font-semibold text-slate-500">
-                    {route.distance_km} km
-                </span>
-            </div>
-
-            {/* Pollution / Risk Section */}
-            <div className="space-y-2.5">
-                <div className="flex justify-between items-center text-xs">
-                    <span className="font-semibold text-slate-400">P. Exposure Index</span>
-                    <span className={`font-bold ${getRiskTextColor(route.risk_level)} ${getRiskBadgeColor(route.risk_level)} px-2 py-0.5 rounded-md`}>
-                        {route.risk_level}
+            <div className="flex flex-col gap-1.5">
+                {/* Top Row: Time | Badges */}
+                <div className="flex justify-between items-center">
+                    <span className={`text-2xl font-bold tracking-tight ${isSelected ? 'text-slate-900' : 'text-slate-900'}`}>
+                        {Math.round(route.duration_min)} <span className="text-sm font-semibold text-slate-400">min</span>
                     </span>
+
+                    <div className="flex gap-2">
+                        {/* CO2 Savings Badge (Cleanest) - Dynamic "Less Toxic" Tag */}
+                        {route.savings_tag && (
+                            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-100/50 border border-emerald-100">
+                                <svg className="w-3.5 h-3.5 text-emerald-600" fill="currentColor" viewBox="0 0 24 24"><path d="M17,8C8,10,5.9,16.17,3.82,21.34L5.71,22l1-2.3A4.49,4.49,0,0,0,8,20C19,20,22,3,22,3,21,5,14,5.25,9,6.25S2,11.5,2,13.5a6.22,6.22,0,0,0,1.75,4.25C6,9.5,17,8,17,8Z" /></svg>
+                                <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wide">{route.savings_tag}</span>
+                            </div>
+                        )}
+                        {/* Fastest Badge */}
+                        {route.is_fastest && (
+                            <span className="inline-flex items-center px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider bg-slate-900 text-white shadow-sm">
+                                Fastest
+                            </span>
+                        )}
+                    </div>
                 </div>
 
-                <div className="h-2.5 w-full rounded-full bg-slate-100 overflow-hidden ring-1 ring-slate-100">
-                    <div
-                        className={`h-full rounded-full ${getRiskColor(route.risk_level)} shadow-sm`}
-                        style={{ width: `${Math.min(route.exposure_score / 2, 100)}%` }}
-                    />
+                {/* Bottom Row: Distance • AQI */}
+                <div className="flex items-center gap-2 text-sm font-medium text-slate-500">
+                    <span>{route.distance_km} km</span>
+                    <span className="text-slate-300">•</span>
+
+                    {/* AQI Dot Badge */}
+                    <div className="flex items-center gap-1.5">
+                        <div className={`w-2 h-2 rounded-full ${styles.dot}`}></div>
+                        <span className="text-slate-600">
+                            AQI {Math.round(route.exposure_score)}
+                        </span>
+                    </div>
                 </div>
             </div>
         </div>

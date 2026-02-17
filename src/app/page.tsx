@@ -86,9 +86,33 @@ export default function Home() {
       lng,
     ]) || [];
 
+  // Helper to determine route color based on risk level
+  const getRouteColor = (riskLevel: string) => {
+    switch (riskLevel) {
+      case "Good":
+        return "#22c55e"; // Green-500
+      case "Moderate":
+        return "#eab308"; // Yellow-500
+      case "Unhealthy for Sensitive Groups":
+        return "#f97316"; // Orange-500
+      case "Unhealthy":
+      case "Very Unhealthy":
+        return "#ef4444"; // Red-500
+      default:
+        return "#6366f1"; // Indigo-500 (Default)
+    }
+  };
+
+  const routeColor = selectedRoute ? getRouteColor(selectedRoute.risk_level) : "#6366f1";
+
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-slate-50">
-      {/* Sidebar */}
+    <div className="relative h-screen w-full overflow-hidden bg-slate-50">
+      {/* Map Area - Full Screen Background */}
+      <div className="absolute inset-0 z-0">
+        <MapWithRoute route={mapRoute} color={routeColor} />
+      </div>
+
+      {/* Sidebar - Floating Panel */}
       <Sidebar
         origin={origin}
         setOrigin={setOrigin}
@@ -100,16 +124,6 @@ export default function Home() {
         setSelectedIndex={setSelectedIndex}
         loading={loading}
       />
-
-      {/* Map Area */}
-      <div className="flex-1 relative z-0">
-        {/* Map Overlay Gradient for smooth transition (optional) */}
-        <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-black/5 to-transparent pointer-events-none z-10"></div>
-
-        <MapWithRoute route={mapRoute} />
-
-        {/* Floating Info (optional, can be added later) */}
-      </div>
     </div>
   );
 }

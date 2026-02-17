@@ -99,11 +99,19 @@ export async function POST(req: Request) {
       curr.exposure_score < prev.exposure_score ? curr : prev,
     );
 
-    // Add flags
+    // Calculate pollution savings
+    const pollutionSaved = fastest.exposure_score - cleanest.exposure_score;
+    const percentageSaved = (pollutionSaved / fastest.exposure_score) * 100;
+
+    // Add flags and tags
     const enhancedResults = results.map((route) => ({
       ...route,
       is_fastest: route === fastest,
       is_cleanest: route === cleanest,
+      // Only add this tag if it's the cleanest route AND it's actually cleaner than the fastest (by at least 5 units of exposure)
+      savings_tag: (route === cleanest && pollutionSaved > 5)
+        ? `${Math.round(percentageSaved)}% Less Toxic`
+        : null
     }));
 
     const responsePayload = {

@@ -14,41 +14,71 @@ import "leaflet/dist/leaflet.css";
 
 type Props = {
   route: [number, number][];
+  color?: string; // Optional prop to color the route
 };
 
 function FitBounds({ route }: Props) {
   const map = useMap();
 
   useEffect(() => {
-    if (route.length > 0) {
-      map.fitBounds(route, { padding: [50, 50] });
-    }
+    // Function to calculate and fit bounds
+    const adjustMapView = () => {
+      if (route.length > 0) {
+        // Check window width to adjust padding for the floating sidebar
+        const isDesktop = window.innerWidth >= 768;
+        // Leaflet padding is [x, y] -> [left, top] for paddingTopLeft
+        const paddingLeft = isDesktop ? 450 : 20;
+
+        map.flyToBounds(route, {
+          paddingTopLeft: [paddingLeft, 50],  // [x, y] -> 450px from Left, 50px from Top
+          paddingBottomRight: [50, 50],       // [x, y] -> 50px from Right, 50px from Bottom
+          maxZoom: 14,
+          animate: true,
+          duration: 1.5 // Slightly slower for better visual effect
+        });
+      }
+    };
+
+    // Initial adjustment
+    adjustMapView();
+
+    // Re-adjust on resize
+    const handleResize = () => {
+      map.invalidateSize();
+      adjustMapView();
+    };
+
+    window.addEventListener("resize", handleResize);
+
+    // Cleanup
+    return () => {
+      window.removeEventListener("resize", handleResize);
+    };
   }, [route, map]);
 
   return null;
 }
 
-// Custom CSS-based icons for a cleaner look
+// Custom SVG Icons
 const createCustomIcon = (color: string) => {
+  const svgIcon = `
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="${color}" width="36px" height="36px" style="filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));">
+    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+  </svg>`;
+
   return L.divIcon({
-    className: "custom-marker",
-    html: `<div style="
-      background-color: ${color};
-      width: 24px;
-      height: 24px;
-      border-radius: 50%;
-      border: 3px solid white;
-      box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-    "></div>`,
-    iconSize: [24, 24],
-    iconAnchor: [12, 12],
+    className: "custom-pin-marker",
+    html: svgIcon,
+    iconSize: [36, 36],
+    iconAnchor: [18, 36], // Bottom tip of the pin
+    popupAnchor: [0, -36],
   });
 };
 
 const startIcon = createCustomIcon("#22c55e"); // Green
 const endIcon = createCustomIcon("#ef4444");   // Red
 
-// Force map to recalculate size when container changes (fixes gray tile issues)
+// Force map to recalculate size when container changes
 function MapResizer() {
   const map = useMap();
 
@@ -57,11 +87,9 @@ function MapResizer() {
       map.invalidateSize();
     });
 
-    // Oberve the map container
     const container = map.getContainer();
     resizeObserver.observe(container);
 
-    // Also force a check after a small delay to handle initial layout shifts
     setTimeout(() => {
       map.invalidateSize();
     }, 100);
@@ -74,7 +102,7 @@ function MapResizer() {
   return null;
 }
 
-export default function MapWithRoute({ route }: Props) {
+export default function MapWithRoute({ route, color = "#6366f1" }: Props) {
   const start = route[0];
   const end = route[route.length - 1];
 
@@ -86,9 +114,10 @@ export default function MapWithRoute({ route }: Props) {
       className="h-full w-full z-0"
     >
       <MapResizer />
+      {/* Light / Silver Map Style */}
       <TileLayer
-        attribution='Tiles &copy; Esri &mdash; Source: Esri, DeLorme, NAVTEQ, USGS, Intermap, iPC, NRCAN, Esri Japan, METI, Esri China (Hong Kong), Esri (Thailand), TomTom, 2012'
-        url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}"
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+        url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
       />
 
       {route.length > 0 && (
@@ -96,9 +125,9 @@ export default function MapWithRoute({ route }: Props) {
           <Polyline
             positions={route}
             pathOptions={{
-              color: "#6366f1", // Indigo-500
-              weight: 6,
-              opacity: 0.8,
+              color: color, // Use dynamic color
+              weight: 6,    // Thicker line
+              opacity: 0.9,
               lineCap: 'round',
               lineJoin: 'round'
             }}
