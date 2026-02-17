@@ -82,6 +82,7 @@ export default function MapWithRoute({ route }: Props) {
     <MapContainer
       center={[28.6139, 77.209]}
       zoom={12}
+      maxZoom={18}
       className="h-full w-full z-0"
     >
       <MapResizer />

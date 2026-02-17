@@ -12,9 +12,14 @@ export async function POST(req: Request) {
         }
 
         const response = await fetch(
-            `https://api.openrouteservice.org/geocode/search?api_key=${process.env.ORS_API_KEY}&text=${encodeURIComponent(
+            `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
                 query
-            )}&size=1`
+            )}&limit=5`,
+            {
+                headers: {
+                    "User-Agent": "EcoRouteApp/1.0 (your@email.com)",
+                },
+            }
         );
 
         if (!response.ok) {
@@ -26,18 +31,20 @@ export async function POST(req: Request) {
 
         const data = await response.json();
 
-        if (!data.features || data.features.length === 0) {
+        if (!data || data.length === 0) {
             return NextResponse.json(
                 { error: "Location not found" },
                 { status: 404 }
             );
         }
 
-        const [lng, lat] = data.features[0].geometry.coordinates;
+        // Take first best match
+        const bestMatch = data[0];
 
         return NextResponse.json({
-            lat,
-            lng,
+            lat: parseFloat(bestMatch.lat),
+            lng: parseFloat(bestMatch.lon),
+            label: bestMatch.display_name,
         });
     } catch (error: any) {
         return NextResponse.json(

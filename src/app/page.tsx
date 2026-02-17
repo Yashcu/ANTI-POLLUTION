@@ -21,29 +21,59 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async () => {
-    setLoading(true);
     try {
-      const originArr = origin.split(",").map(Number);
-      const destArr = destination.split(",").map(Number);
+      setLoading(true);
 
-      const res = await fetch("/api/route", {
+      // 1. Geocode origin
+      const originRes = await fetch("/api/geocode", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: origin }),
+      });
+
+      const originData = await originRes.json();
+
+      if (!originRes.ok) {
+        alert(originData.error);
+        setLoading(false);
+        return;
+      }
+
+      // 2. Geocode destination
+      const destRes = await fetch("/api/geocode", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: destination }),
+      });
+
+      const destData = await destRes.json();
+
+      if (!destRes.ok) {
+        alert(destData.error);
+        setLoading(false);
+        return;
+      }
+
+      // 3. Call route API with coordinates
+      const routeRes = await fetch("/api/route", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          origin: originArr,
-          destination: destArr,
+          origin: [originData.lat, originData.lng],
+          destination: [destData.lat, destData.lng],
         }),
       });
 
-      const data = await res.json();
+      const routeData = await routeRes.json();
 
-      if (data.routes) {
-        setRoutes(data.routes);
+      if (routeData.routes) {
+        setRoutes(routeData.routes);
         setSelectedIndex(0);
       }
-    } catch (error) {
-      console.error("Error fetching routes:", error);
-    } finally {
+
+      setLoading(false);
+    } catch (err) {
+      console.error(err);
       setLoading(false);
     }
   };
