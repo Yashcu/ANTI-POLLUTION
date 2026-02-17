@@ -112,3 +112,44 @@ export async function getGridStatus() {
 
     return { status: status || "fresh", ageMinutes };
 }
+
+export async function getPollutionGrid(): Promise<GridCell[]> {
+    const grid = await redis.get<GridCell[]>(GRID_KEY);
+
+    if (!grid) {
+        throw new Error("Pollution grid not initialized");
+    }
+
+    return grid;
+}
+
+function distanceSquared(
+    lat1: number,
+    lng1: number,
+    lat2: number,
+    lng2: number
+) {
+    const dLat = lat1 - lat2;
+    const dLng = lng1 - lng2;
+    return dLat * dLat + dLng * dLng;
+}
+
+export function findNearestGridValue(
+    lat: number,
+    lng: number,
+    grid: GridCell[]
+): number {
+    let minDist = Infinity;
+    let nearestValue = 0;
+
+    for (const cell of grid) {
+        const dist = distanceSquared(lat, lng, cell.lat, cell.lng);
+
+        if (dist < minDist) {
+            minDist = dist;
+            nearestValue = cell.value;
+        }
+    }
+
+    return nearestValue;
+}
