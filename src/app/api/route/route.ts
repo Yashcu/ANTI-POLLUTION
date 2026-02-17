@@ -5,6 +5,7 @@ import { redis } from "@/lib/redis";
 import { routeSchema } from "@/lib/validation";
 import { classifyAQI } from "@/lib/aqi";
 import { rateLimit } from "@/lib/rateLimit";
+import { isInsideChandigarh } from "@/lib/city";
 
 export async function POST(req: Request) {
   try {
@@ -17,6 +18,16 @@ export async function POST(req: Request) {
       );
     }
     const { origin, destination } = parsed.data;
+
+    if (
+      !isInsideChandigarh(origin[0], origin[1]) ||
+      !isInsideChandigarh(destination[0], destination[1])
+    ) {
+      return NextResponse.json(
+        { error: "Routing supported only within Chandigarh city limits" },
+        { status: 400 }
+      );
+    }
 
     // // Rate Limiting
     // const ip = req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "unknown";
