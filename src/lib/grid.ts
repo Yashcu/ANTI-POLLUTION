@@ -23,6 +23,8 @@ const GRID_STATUS_KEY = "grid:chandigarh:status";
 
 const METERS_PER_DEGREE_LAT = 111000;
 
+let inMemoryGrid: GridData | null = null;
+
 // Convert meters → longitude degrees (varies by latitude)
 function metersToLngDegrees(meters: number, lat: number): number {
     const metersPerDegreeLng =
@@ -33,10 +35,10 @@ function metersToLngDegrees(meters: number, lat: number): number {
 
 export async function buildPollutionGrid() {
     try {
-        const stations = await getChandigarhStations();
+        const { stations, quality } = await getChandigarhStations();
 
-        if (!stations || stations.length === 0) {
-            throw new Error("No stations available");
+        if (stations.length === 0) {
+            throw new Error("No usable stations for grid build");
         }
 
         const latStep = GRID_RESOLUTION_METERS / METERS_PER_DEGREE_LAT;
@@ -91,12 +93,13 @@ export async function buildPollutionGrid() {
         };
 
         await redis.set(GRID_KEY, gridData);
+        inMemoryGrid = gridData;
         await redis.set(GRID_TIMESTAMP_KEY, Date.now());
-        await redis.set(GRID_STATUS_KEY, "fresh");
+        await redis.set(GRID_STATUS_KEY, quality);
 
         return {
             cellCount: rows * cells[0].length,
-            status: "fresh",
+            status: quality,
         };
 
     } catch (error: any) {
@@ -112,7 +115,7 @@ export async function buildPollutionGrid() {
 
 export async function getGridStatus() {
     const timestamp = await redis.get<number>(GRID_TIMESTAMP_KEY);
-    const status = await redis.get<string>(GRID_STATUS_KEY);
+    const sensorQuality = await redis.get<string>(GRID_STATUS_KEY);
 
     if (!timestamp) {
         return { status: "stale", ageMinutes: null };
@@ -121,23 +124,30 @@ export async function getGridStatus() {
     const ageMs = Date.now() - timestamp;
     const ageMinutes = ageMs / (1000 * 60);
 
-    if (ageMinutes > 360) {
+    if (ageMinutes > 90) {
         return { status: "stale", ageMinutes };
     }
 
-    if (ageMinutes > 30) {
+    if (ageMinutes > 60 || sensorQuality === "degraded") {
         return { status: "degraded", ageMinutes };
     }
 
-    return { status: status || "fresh", ageMinutes };
+    return { status: "fresh", ageMinutes };
 }
 
 export async function getPollutionGrid(): Promise<GridData> {
+
+    if (inMemoryGrid) {
+        return inMemoryGrid;
+    }
+
     const grid = await redis.get<GridData>(GRID_KEY);
 
     if (!grid) {
         throw new Error("Pollution grid not initialized");
     }
+
+    inMemoryGrid = grid;
 
     return grid;
 }
@@ -149,11 +159,13 @@ export function getGridValueAt(
 ): number {
     const { cells, latStep, rows, cols } = grid;
 
-    const row = Math.floor(
-        (lat - CHANDIGARH_BOUNDARY.minLat) / latStep
-    );
+    const rowFloat =
+        (lat - CHANDIGARH_BOUNDARY.minLat) / latStep;
 
-    if (row < 0 || row >= rows) {
+    const row = Math.floor(rowFloat);
+    const yRatio = rowFloat - row;
+
+    if (row < 0 || row >= rows - 1) {
         return 0;
     }
 
@@ -162,14 +174,31 @@ export function getGridValueAt(
         lat
     );
 
-    const col = Math.floor(
-        (lng - CHANDIGARH_BOUNDARY.minLng) / lngStep
-    );
+    const colFloat =
+        (lng - CHANDIGARH_BOUNDARY.minLng) / lngStep;
 
-    if (col < 0 || col >= cols) {
+    const col = Math.floor(colFloat);
+    const xRatio = colFloat - col;
+
+    if (col < 0 || col >= cols - 1) {
         return 0;
     }
+    const Q11 = cells[row][col].value;
+    const Q21 = cells[row][col + 1].value;
+    const Q12 = cells[row + 1][col].value;
+    const Q22 = cells[row + 1][col + 1].value;
 
-    return cells[row][col].value;
+    // Interpolate horizontally
+    const top =
+        Q11 * (1 - xRatio) + Q21 * xRatio;
+
+    const bottom =
+        Q12 * (1 - xRatio) + Q22 * xRatio;
+
+    const interpolated =
+        top * (1 - yRatio) + bottom * yRatio;
+
+    return interpolated;
+
 }
 

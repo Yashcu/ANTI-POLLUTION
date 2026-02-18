@@ -4,7 +4,7 @@ import { estimatePollution } from "@/lib/interpolation";
 
 export async function GET() {
     try {
-        const stations = await getChandigarhStations();
+        const { stations, quality } = await getChandigarhStations();
 
         const testValue = estimatePollution(
             30.740000,
@@ -14,6 +14,7 @@ export async function GET() {
 
         return NextResponse.json({
             count: stations.length,
+            quality,
             sample: stations.slice(0, 2),
             testInterpolation: testValue
         });

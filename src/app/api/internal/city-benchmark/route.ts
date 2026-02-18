@@ -67,13 +67,13 @@ export async function GET() {
                 if (!selected) continue;
 
                 const pollutionSaved =
-                    fastest.exposure_score - selected.exposure_score;
+                    fastest.pollution_load_index - selected.pollution_load_index;
 
                 if (pollutionSaved > 0) {
                     divergenceCount++;
 
                     const percentageSaved =
-                        (pollutionSaved / fastest.exposure_score) * 100;
+                        (pollutionSaved / fastest.pollution_load_index) * 100;
 
                     results.push(percentageSaved);
 

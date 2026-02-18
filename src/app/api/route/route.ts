@@ -75,7 +75,6 @@ export async function POST(req: Request) {
             target_count: 2,
             share_factor: 0.6,
           },
-          extra_info: ["waytype"]
         })
       },
       2,        // retries
@@ -103,30 +102,16 @@ export async function POST(req: Request) {
 
         const geometryCoords = feature.geometry.coordinates;
 
-        // Build waytype lookup aligned to geometry indices
-        const wayTypeLookup: number[] =
-          new Array(geometryCoords.length).fill(0);
-
-        const waytypeValues =
-          feature.properties.extras?.waytype?.values || [];
-
-        for (const [start, end, type] of waytypeValues) {
-          for (let i = start; i < end; i++) {
-            wayTypeLookup[i] = type;
-          }
-        }
-
         const { totalExposure, averagePollution } =
           await calculateRouteExposure(
             geometryCoords,
-            wayTypeLookup
           );
 
 
         return {
           distance_km: Number(distanceKm.toFixed(2)),
           duration_min: Number(durationMin.toFixed(2)),
-          exposure_score: Number(totalExposure.toFixed(2)),
+          pollution_load_index: Number(totalExposure.toFixed(2)),
           average_pollution: Number(averagePollution.toFixed(2)),
           risk_level: classifyAQI(averagePollution),
           route: feature.geometry,
@@ -134,33 +119,35 @@ export async function POST(req: Request) {
       }),
     );
 
-    // Normalize exposure relative to routes
-    const maxExposure = Math.max(
-      ...results.map(r => r.exposure_score)
-    );
+    const ALPHA = 0.55;
+    const BETA = 0.45;
 
-    const minExposure = Math.min(
-      ...results.map(r => r.exposure_score)
-    );
+    const maxDistance = Math.max(...results.map(r => r.distance_km));
+    const minDistance = Math.min(...results.map(r => r.distance_km));
 
-    // Prevent divide by zero
-    const exposureRange = maxExposure - minExposure || 1;
+    const maxPollution = Math.max(...results.map(r => r.pollution_load_index));
+    const minPollution = Math.min(...results.map(r => r.pollution_load_index));
 
-    // Lambda weight (tunable later)
-    const LAMBDA = 3;
+    const distanceRange = maxDistance - minDistance || 1;
+    const pollutionRange = maxPollution - minPollution || 1;
 
-    // Compute composite score
     const scoredRoutes = results.map(route => {
-      const normalizedExposure =
-        (route.exposure_score - minExposure) / exposureRange;
 
-      const score =
-        route.distance_km +
-        LAMBDA * normalizedExposure;
+      const distanceNorm =
+        (route.distance_km - minDistance) / distanceRange;
+
+      const pollutionNorm =
+        (route.pollution_load_index - minPollution) / pollutionRange;
+
+      const composite =
+        ALPHA * pollutionNorm +
+        BETA * distanceNorm;
 
       return {
         ...route,
-        composite_score: Number(score.toFixed(4)),
+        pollution_norm: Number(pollutionNorm.toFixed(4)),
+        distance_norm: Number(distanceNorm.toFixed(4)),
+        composite_score: Number(composite.toFixed(4)),
       };
     });
 

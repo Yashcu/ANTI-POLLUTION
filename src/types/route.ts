@@ -12,7 +12,9 @@ export interface RouteGeometry {
 export interface RouteModel {
     distance_km: number;
     duration_min: number;
-    exposure_score: number;
+    pollution_load_index: number;
+    pollution_norm?: number;
+    distance_norm?: number;
     average_pollution: number;
     risk_level: RiskLevel;
     route: RouteGeometry;

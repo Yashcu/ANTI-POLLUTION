@@ -68,8 +68,6 @@ export default function Home() {
     }
   };
 
-
-
   const fastestRoute = routes.find((r) => r.is_fastest);
   const cleanestRoute = routes.find((r) => r.is_selected);
 
@@ -78,8 +76,8 @@ export default function Home() {
 
   if (fastestRoute && cleanestRoute && fastestRoute !== cleanestRoute) {
     exposureSavedPercent =
-      ((fastestRoute.exposure_score - cleanestRoute.exposure_score) /
-        fastestRoute.exposure_score) *
+      ((fastestRoute.pollution_load_index - cleanestRoute.pollution_load_index) /
+        fastestRoute.pollution_load_index) *
       100;
 
     extraDistancePercent =

@@ -2,6 +2,7 @@ import { Station } from "./cpcb";
 
 const POWER = 2;
 const MIN_DISTANCE_METERS = 100;
+const MAX_INFLUENCE_RADIUS_METERS = 5000;
 
 function toRadians(deg: number) {
     return deg * (Math.PI / 180);
@@ -48,6 +49,10 @@ export function estimatePollution(
         // If very close to station, return its value directly
         if (distance < MIN_DISTANCE_METERS) {
             return station.value;
+        }
+
+        if (distance > MAX_INFLUENCE_RADIUS_METERS) {
+            continue;
         }
 
         const weight = 1 / Math.pow(distance, POWER);
