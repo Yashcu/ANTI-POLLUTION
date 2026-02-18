@@ -1,204 +1,133 @@
 import { NextResponse } from "next/server";
-import { calculateRouteExposure } from "@/lib/pollution";
-import { redis } from "@/lib/redis";
-import { routeSchema } from "@/lib/validation";
-import { classifyAQI } from "@/lib/aqi";
-import { isInsideChandigarh } from "@/lib/city";
-import { getGridStatus } from "@/lib/grid";
-import { fetchWithRetry } from "@/lib/orsClient";
+import { Ratelimit } from "@upstash/ratelimit";
+import { routeSchema } from "@/modules/routing/validation";
+import { isInsideChandigarh } from "@/domain/city";
+import { getPollutionGrid } from "@/modules/grid/gridService";
+import { evaluateRoutes } from "@/modules/routing/routeService";
+import { scoreRoutes } from "@/domain/scoring";
+import { AppError } from "@/shared/errors/AppError";
+import { respondError } from "@/shared/http/respondError";
+import { buildRouteCacheKey, getCachedRoute, setCachedRoute } from "@/modules/routing/routeCache";
+import { logInfo, logError } from "@/infrastructure/logger";
+import { redis } from "@/infrastructure/redis";
+import { requestContext } from "@/infrastructure/requestContext";
+import { randomUUID } from "crypto";
 
-const requestStart = Date.now();
+const ratelimit = new Ratelimit({
+  redis,
+  limiter: Ratelimit.slidingWindow(20, "60 s"),
+  analytics: true,
+});
 
 export async function POST(req: Request) {
-  try {
-    const body = await req.json();
-    const parsed = routeSchema.safeParse(body);
-    if (!parsed.success) {
-      return NextResponse.json(
-        { error: parsed.error.issues[0].message },
-        { status: 400 },
-      );
-    }
-    const { origin, destination } = parsed.data;
-    const gridStatus = await getGridStatus();
+  const requestId = req.headers.get("x-request-id") ?? randomUUID();
 
-    if (
-      !isInsideChandigarh(origin[0], origin[1]) ||
-      !isInsideChandigarh(destination[0], destination[1])
-    ) {
-      return NextResponse.json(
-        { error: "Routing supported only within Chandigarh city limits" },
-        { status: 400 }
-      );
-    }
+  return requestContext.run({ requestId }, async () => {
+    try {
+      const requestStart = Date.now();
+      logInfo("route_request_start", { requestId });
 
-    if (gridStatus.status === "stale") {
-      return NextResponse.json(
-        {
-          error: "Pollution data unavailable or stale",
-          grid: {
-            status: gridStatus.status,
-            age_minutes: gridStatus.ageMinutes
-          }
-        },
-        { status: 503 }
-      );
-    }
+      // Rate Limiting — sliding window, 20 req/min per IP
+      const ip = req.headers.get("x-forwarded-for") ?? "anonymous";
+      const { success } = await ratelimit.limit(ip);
 
-    // // Rate Limiting
-    // const ip = req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "unknown";
-    // const requestCount = await rateLimit(ip);
-    // if (requestCount > 20) {
-    //     return NextResponse.json(
-    //         { error: "Too many requests. Try again later." },
-    //         { status: 429 },
-    //     );
-    // }
-
-    const round = (num: number) => Number(num.toFixed(4));
-    const cacheKey = `route:${round(origin[0])}:${round(origin[1])}:${round(destination[0])}:${round(destination[1])}`;
-    const cached = await redis.get(cacheKey);
-    if (cached) {
-      return NextResponse.json(cached);
-    }
-
-    const orsStart = Date.now();
-    // Call OpenRouteService
-    const orsResponse = await fetchWithRetry(
-      "https://api.openrouteservice.org/v2/directions/driving-car/geojson",
-      {
-        method: "POST",
-        headers: {
-          Authorization: process.env.ORS_API_KEY!,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          coordinates: [
-            [origin[1], origin[0]],
-            [destination[1], destination[0]],
-          ],
-          alternative_routes: {
-            target_count: 2,
-            share_factor: 0.6,
-          },
-        })
-      },
-      2,        // retries
-      4000      // timeout ms
-    );
-    const orsLatency = Date.now() - orsStart;
-
-    if (!orsResponse.ok) {
-      return NextResponse.json(
-        {
-          error: "Routing service temporarily unavailable",
-          upstream_status: orsResponse.status,
-        },
-        { status: 502 }
-      );
-    }
-
-    const data = await orsResponse.json();
-
-    const routes = data.features;
-
-    const results = await Promise.all(
-      routes.map(async (feature: any) => {
-        const distanceKm = feature.properties.summary.distance / 1000;
-        const durationMin = feature.properties.summary.duration / 60;
-
-        const geometryCoords = feature.geometry.coordinates;
-
-        const { totalExposure, averagePollution } =
-          await calculateRouteExposure(
-            geometryCoords,
-          );
-
-
-        return {
-          distance_km: Number(distanceKm.toFixed(2)),
-          duration_min: Number(durationMin.toFixed(2)),
-          pollution_load_index: Number(totalExposure.toFixed(2)),
-          average_pollution: Number(averagePollution.toFixed(2)),
-          risk_level: classifyAQI(averagePollution),
-          route: feature.geometry,
-        };
-      }),
-    );
-
-    const ALPHA = 0.55;
-    const BETA = 0.45;
-
-    const maxDistance = Math.max(...results.map(r => r.distance_km));
-    const minDistance = Math.min(...results.map(r => r.distance_km));
-
-    const maxPollution = Math.max(...results.map(r => r.pollution_load_index));
-    const minPollution = Math.min(...results.map(r => r.pollution_load_index));
-
-    const distanceRange = maxDistance - minDistance || 1;
-    const pollutionRange = maxPollution - minPollution || 1;
-
-    const scoredRoutes = results.map(route => {
-
-      const distanceNorm =
-        (route.distance_km - minDistance) / distanceRange;
-
-      const pollutionNorm =
-        (route.pollution_load_index - minPollution) / pollutionRange;
-
-      const composite =
-        ALPHA * pollutionNorm +
-        BETA * distanceNorm;
-
-      return {
-        ...route,
-        pollution_norm: Number(pollutionNorm.toFixed(4)),
-        distance_norm: Number(distanceNorm.toFixed(4)),
-        composite_score: Number(composite.toFixed(4)),
-      };
-    });
-
-    if (process.env.NODE_ENV !== "production") {
-      console.log(JSON.stringify({
-        type: "route_evaluation",
-        routes: scoredRoutes.map(r => ({
-          distance_km: r.distance_km,
-          pollution_load_index: r.pollution_load_index,
-          composite_score: r.composite_score
-        }))
-      }, null, 2));
-    }
-
-    const bestRoute = scoredRoutes.reduce((prev, curr) =>
-      curr.composite_score < prev.composite_score ? curr : prev
-    );
-
-    // Add flags and tags
-    const enhancedResults = scoredRoutes.map(route => ({
-      ...route,
-      is_selected: route === bestRoute
-    }));
-
-    const totalTimeMs = Date.now() - requestStart;
-
-    const responsePayload = {
-      routes: enhancedResults,
-      grid: {
-        status: gridStatus.status,
-        age_minutes: gridStatus.ageMinutes
-      },
-      metrics: {
-        total_processing_ms: totalTimeMs,
-        ors_latency_ms: orsLatency
+      if (!success) {
+        return NextResponse.json(
+          { error: "Too many requests" },
+          { status: 429 }
+        );
       }
-    };
-    // Save to Redis (20 min TTL)
-    await redis.set(cacheKey, responsePayload, {
-      ex: 60 * 20,
-    });
 
-    return NextResponse.json(responsePayload);
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
+      const body = await req.json();
+      const parsed = routeSchema.safeParse(body);
+      if (!parsed.success) {
+        throw new AppError(
+          parsed.error.issues[0].message,
+          400,
+          "INVALID_INPUT"
+        );
+      }
+      const origin = parsed.data.origin as [number, number];
+      const destination = parsed.data.destination as [number, number];
+
+      if (
+        !isInsideChandigarh(origin[0], origin[1]) ||
+        !isInsideChandigarh(destination[0], destination[1])
+      ) {
+        throw new AppError(
+          "Routing supported only within Chandigarh city limits",
+          400,
+          "OUTSIDE_CHANDIGARH"
+        );
+      }
+
+      const cacheKey = buildRouteCacheKey(origin, destination);
+      const cached = await getCachedRoute(cacheKey);
+      if (cached) {
+        logInfo("route_cache_hit", { requestId });
+        return NextResponse.json({
+          ...cached,
+          metrics: {
+            total_processing_ms: Date.now() - requestStart,
+            ors_latency_ms: 0
+          }
+        }, {
+          headers: { "x-request-id": requestId },
+        });
+      }
+
+      // Fetch grid ONCE per request (Phase 3 optimization)
+      const { grid, status, ageMinutes } = await getPollutionGrid();
+
+      if (status === "stale") {
+        throw new AppError(
+          "Pollution data unavailable or stale",
+          503,
+          "GRID_STALE",
+          { age_minutes: ageMinutes }
+        );
+      }
+
+      const { routes: results, orsLatency } =
+        await evaluateRoutes({ origin, destination, grid });
+
+      const enhancedResults = scoreRoutes(results);
+
+      const totalTimeMs = Date.now() - requestStart;
+
+      const responsePayload = {
+        routes: enhancedResults,
+        grid_meta: {
+          status: status,
+          age_minutes: ageMinutes,
+          last_updated: new Date(Date.now() - (ageMinutes || 0) * 60000).toISOString(),
+          freshness_minutes: ageMinutes || 0,
+          interpolation: "idw",
+          source: "cpcb"
+        },
+        metrics: {
+          total_processing_ms: totalTimeMs,
+          ors_latency_ms: orsLatency
+        }
+      };
+
+      logInfo("route_request_completed", {
+        route_count: enhancedResults.length,
+        grid_status: status,
+        grid_age_minutes: ageMinutes,
+        processing_time_ms: totalTimeMs,
+        ors_latency_ms: orsLatency
+      });
+
+      // Save to Redis (20 min TTL)
+      await setCachedRoute(cacheKey, responsePayload);
+
+      return NextResponse.json(responsePayload, {
+        headers: { "x-request-id": requestId },
+      });
+    } catch (error) {
+      logError("route_failure", error);
+      return respondError(error);
+    }
+  });
 }

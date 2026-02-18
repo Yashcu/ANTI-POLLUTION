@@ -1,56 +1,57 @@
 import { NextResponse } from "next/server";
+import { respondError } from "@/shared/http/respondError";
+import { logError } from "@/infrastructure/logger";
+import { requestContext } from "@/infrastructure/requestContext";
+import { geocode } from "@/modules/geocoding/geocodeService";
+import { randomUUID } from "crypto";
+import { Ratelimit } from "@upstash/ratelimit";
+import { redis } from "@/infrastructure/redis";
+
+const ratelimit = new Ratelimit({
+    redis,
+    limiter: Ratelimit.slidingWindow(10, "60 s"),
+    analytics: true,
+});
 
 export async function POST(req: Request) {
-    try {
-        const { query } = await req.json();
+    const requestId = randomUUID();
 
-        if (!query || typeof query !== "string") {
-            return NextResponse.json(
-                { error: "Location query required" },
-                { status: 400 }
-            );
-        }
-        const structuredQuery = `${query}, Chandigarh, India`;
+    return requestContext.run({ requestId }, async () => {
+        try {
+            const ip = req.headers.get("x-forwarded-for") ?? "anonymous";
+            const { success } = await ratelimit.limit(ip);
 
-        const response = await fetch(
-            `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(
-                structuredQuery
-            )}&limit=5&countrycodes=in&viewbox=76.75,30.78,76.85,30.65&bounded=1`,
-            {
-                headers: {
-                    "User-Agent": "EcoRouteApp/1.0 (your@gmail.com)",
-                },
+            if (!success) {
+                return NextResponse.json(
+                    { error: "Too many requests" },
+                    { status: 429 }
+                );
             }
-        );
 
-        if (!response.ok) {
-            return NextResponse.json(
-                { error: "Geocoding service unavailable" },
-                { status: 502 }
-            );
+            const { query } = await req.json();
+
+            if (!query || typeof query !== "string") {
+                return NextResponse.json(
+                    { error: "Location query required" },
+                    { status: 400 }
+                );
+            }
+
+            const result = await geocode(query);
+
+            if (!result) {
+                return NextResponse.json(
+                    { error: "Location not found within Chandigarh city limits" },
+                    { status: 404 }
+                );
+            }
+
+            return NextResponse.json(result, {
+                headers: { "x-request-id": requestId },
+            });
+        } catch (error) {
+            logError("geocode_failure", error);
+            return respondError(error);
         }
-
-        const data = await response.json();
-
-        if (!data || data.length === 0) {
-            return NextResponse.json(
-                { error: "Location not found within Chandigarh city limits" },
-                { status: 404 }
-            );
-        }
-
-        // Take first best match
-        const bestMatch = data[0];
-
-        return NextResponse.json({
-            lat: parseFloat(bestMatch.lat),
-            lng: parseFloat(bestMatch.lon),
-            label: bestMatch.display_name,
-        });
-    } catch (error: any) {
-        return NextResponse.json(
-            { error: error.message },
-            { status: 500 }
-        );
-    }
+    });
 }

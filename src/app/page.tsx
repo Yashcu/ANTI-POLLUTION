@@ -2,13 +2,13 @@
 
 import { useState } from "react";
 import dynamic from "next/dynamic";
-import Sidebar from "@/components/Sidebar";
-import { GridMeta, RouteModel } from "@/types/route";
-import { geocode, fetchRoutes } from "@/lib/api";
+import Sidebar from "@/ui/Sidebar";
+import { GridMeta, RouteModel } from "@/shared/types/route";
+import { geocode, fetchRoutes } from "@/ui/api";
 
 type Status = "idle" | "loading" | "success" | "error";
 
-const MapWithRoute = dynamic(() => import("@/components/MapWithRoute"), {
+const MapWithRoute = dynamic(() => import("@/ui/MapWithRoute"), {
   ssr: false,
   loading: () => (
     <div className="h-full w-full flex items-center justify-center bg-slate-100 text-slate-400">

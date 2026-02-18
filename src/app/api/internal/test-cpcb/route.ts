@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
-import { getChandigarhStations } from "@/lib/cpcb";
-import { estimatePollution } from "@/lib/interpolation";
+import { getChandigarhStations } from "@/modules/pollution/cpcbClient";
+import { estimatePollution } from "@/modules/grid/interpolation";
+import { withInternalAuth } from "@/shared/http/withInternalAuth";
+import { respondError } from "@/shared/http/respondError";
 
-export async function GET() {
+export const GET = withInternalAuth(async () => {
     try {
         const { stations, quality } = await getChandigarhStations();
 
@@ -18,10 +20,8 @@ export async function GET() {
             sample: stations.slice(0, 2),
             testInterpolation: testValue
         });
-    } catch (error: any) {
-        return NextResponse.json(
-            { error: error.message },
-            { status: 500 }
-        );
+    } catch (error) {
+        return respondError(error);
     }
-}
+});
+

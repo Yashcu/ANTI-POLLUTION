@@ -1,7 +1,8 @@
-import { buildPollutionGrid, getGridStatus } from "@/lib/grid";
+import { buildPollutionGrid, getGridStatus } from "@/modules/grid/gridService";
 import { NextResponse } from "next/server";
+import { withInternalAuth } from "@/shared/http/withInternalAuth";
 
-export async function GET() {
+export const GET = withInternalAuth(async () => {
     const result = await buildPollutionGrid();
     const status = await getGridStatus();
 
@@ -9,4 +10,4 @@ export async function GET() {
         ...result,
         gridStatus: status,
     });
-}
+});
