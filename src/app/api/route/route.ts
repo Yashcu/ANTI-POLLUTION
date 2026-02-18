@@ -7,6 +7,8 @@ import { isInsideChandigarh } from "@/lib/city";
 import { getGridStatus } from "@/lib/grid";
 import { fetchWithRetry } from "@/lib/orsClient";
 
+const requestStart = Date.now();
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -34,7 +36,10 @@ export async function POST(req: Request) {
       return NextResponse.json(
         {
           error: "Pollution data unavailable or stale",
-          grid_status: gridStatus
+          grid: {
+            status: gridStatus.status,
+            age_minutes: gridStatus.ageMinutes
+          }
         },
         { status: 503 }
       );
@@ -57,6 +62,7 @@ export async function POST(req: Request) {
       return NextResponse.json(cached);
     }
 
+    const orsStart = Date.now();
     // Call OpenRouteService
     const orsResponse = await fetchWithRetry(
       "https://api.openrouteservice.org/v2/directions/driving-car/geojson",
@@ -80,6 +86,7 @@ export async function POST(req: Request) {
       2,        // retries
       4000      // timeout ms
     );
+    const orsLatency = Date.now() - orsStart;
 
     if (!orsResponse.ok) {
       return NextResponse.json(
@@ -151,6 +158,17 @@ export async function POST(req: Request) {
       };
     });
 
+    if (process.env.NODE_ENV !== "production") {
+      console.log(JSON.stringify({
+        type: "route_evaluation",
+        routes: scoredRoutes.map(r => ({
+          distance_km: r.distance_km,
+          pollution_load_index: r.pollution_load_index,
+          composite_score: r.composite_score
+        }))
+      }, null, 2));
+    }
+
     const bestRoute = scoredRoutes.reduce((prev, curr) =>
       curr.composite_score < prev.composite_score ? curr : prev
     );
@@ -161,9 +179,18 @@ export async function POST(req: Request) {
       is_selected: route === bestRoute
     }));
 
+    const totalTimeMs = Date.now() - requestStart;
+
     const responsePayload = {
       routes: enhancedResults,
-      grid_status: gridStatus,
+      grid: {
+        status: gridStatus.status,
+        age_minutes: gridStatus.ageMinutes
+      },
+      metrics: {
+        total_processing_ms: totalTimeMs,
+        ors_latency_ms: orsLatency
+      }
     };
     // Save to Redis (20 min TTL)
     await redis.set(cacheKey, responsePayload, {

@@ -1,19 +1,12 @@
 import { NextResponse } from "next/server";
-import { redis } from "@/lib/redis";
+import { getGridStatus } from "@/lib/grid";
 
 export async function GET() {
-    try {
-        await redis.ping();
+    const gridStatus = await getGridStatus();
 
-        return NextResponse.json({
-            status: "ok",
-            redis: "connected",
-            pollution_engine: "not_initialized"
-        });
-    } catch (error: any) {
-        return NextResponse.json(
-            { status: "error", message: error.message },
-            { status: 500 }
-        );
-    }
+    return NextResponse.json({
+        status: "ok",
+        timestamp: new Date().toISOString(),
+        grid: gridStatus
+    });
 }
