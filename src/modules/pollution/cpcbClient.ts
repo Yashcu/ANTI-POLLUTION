@@ -45,7 +45,6 @@ export async function getChandigarhStations(): Promise<{
     if (cached) return cached;
 
     logInfo("cpcb_fetch_start");
-    console.log("CPCB KEY:", API_KEY)
 
     const url = `${API_URL}?api-key=${API_KEY}&format=json&filters[state]=Chandigarh&filters[pollutant_id]=PM2.5&limit=100`;
 
