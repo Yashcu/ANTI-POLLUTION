@@ -126,7 +126,11 @@ export async function POST(req: Request) {
         headers: { "x-request-id": requestId },
       });
     } catch (error) {
-      logError("route_failure", error);
+      logError("route_failure", {
+        message: error instanceof Error ? error.message : "Unknown error",
+        stack: error instanceof Error ? error.stack : undefined,
+        error,
+      });
       return respondError(error);
     }
   });

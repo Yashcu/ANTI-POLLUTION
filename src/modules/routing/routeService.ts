@@ -15,28 +15,38 @@ export async function evaluateRoutes(
 
     const orsStart = Date.now();
 
-    const orsResponse = await fetchWithRetry(
-        "https://api.openrouteservice.org/v2/directions/driving-car/geojson",
-        {
-            method: "POST",
-            headers: {
-                Authorization: env.ORS_API_KEY,
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-                coordinates: [
-                    [origin[1], origin[0]],
-                    [destination[1], destination[0]],
-                ],
-                alternative_routes: {
-                    target_count: 2,
-                    share_factor: 0.6,
+    let orsResponse: Response;
+
+    try {
+        orsResponse = await fetchWithRetry(
+            "https://api.openrouteservice.org/v2/directions/driving-car/geojson",
+            {
+                method: "POST",
+                headers: {
+                    Authorization: env.ORS_API_KEY,
+                    "Content-Type": "application/json",
                 },
-            }),
-        },
-        2,
-        4000
-    );
+                body: JSON.stringify({
+                    coordinates: [
+                        [origin[1], origin[0]],
+                        [destination[1], destination[0]],
+                    ],
+                    alternative_routes: {
+                        target_count: 2,
+                        share_factor: 0.6,
+                    },
+                }),
+            },
+            2,
+            4000
+        );
+    } catch (error) {
+        throw new AppError(
+            "Routing service temporarily unavailable",
+            503,
+            "ORS_UNAVAILABLE"
+        );
+    }
 
     if (!orsResponse.ok) {
         throw new AppError(
