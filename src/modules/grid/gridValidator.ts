@@ -2,15 +2,10 @@ import { z } from "zod";
 import { AppError } from "@/shared/errors/AppError";
 import { logError } from "@/infrastructure/logger";
 
-const gridCellSchema = z.object({
-    lat: z.number(),
-    lng: z.number(),
-    value: z.number(),
-});
-
 export const gridDataSchema = z.object({
-    cells: z.array(z.array(gridCellSchema)),
+    data: z.string(), // Validates the Base64 string
     latStep: z.number(),
+    lngStep: z.number(),
     rows: z.number(),
     cols: z.number(),
 });

@@ -1,12 +1,15 @@
-export type GridCell = {
-    lat: number;
-    lng: number;
-    value: number;
+export type GridData = {
+    data: Float32Array;
+    latStep: number;
+    lngStep: number;
+    rows: number;
+    cols: number;
 };
 
-export type GridData = {
-    cells: GridCell[][];
+export type RedisGridPayload = {
+    data: string; // Base64 encoded Float32Array
     latStep: number;
+    lngStep: number;
     rows: number;
     cols: number;
 };

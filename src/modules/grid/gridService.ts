@@ -27,8 +27,19 @@ export async function buildPollutionGrid() {
     try {
         const { gridData, quality, cellCount } = await computePollutionGrid();
 
+        // Convert Float32Array to Node Buffer, then to Base64 String
+        const base64Data = Buffer.from(gridData.data.buffer).toString('base64');
+
+        const payload = {
+            data: base64Data,
+            latStep: gridData.latStep,
+            lngStep: gridData.lngStep,
+            rows: gridData.rows,
+            cols: gridData.cols
+        };
+
         const startSet = Date.now();
-        await redis.set(GRID_KEY, gridData);
+        await redis.set(GRID_KEY, payload);
         await redis.set(GRID_META_KEY, {
             builtAt: Date.now(),
             sensorQuality: quality,
@@ -119,10 +130,7 @@ export async function getPollutionGrid() {
         const ageMinutes = (Date.now() - inMemoryGrid.meta.builtAt) / 60000;
         return {
             grid: inMemoryGrid.grid,
-            status:
-                ageMinutes > 90 ? "stale" :
-                    ageMinutes > 60 || inMemoryGrid.meta.sensorQuality === 'degraded' ? "aging" :
-                        "fresh",
+            status: ageMinutes > 90 ? "stale" : ageMinutes > 60 || inMemoryGrid.meta.sensorQuality === 'degraded' ? "aging" : "fresh",
             ageMinutes,
         };
     }
@@ -139,29 +147,37 @@ export async function getPollutionGrid() {
         if (shouldTriggerRebuild()) {
             triggerBackgroundRebuild();
         }
-
-        throw new AppError(
-            "Pollution grid initializing. Please retry in a moment.",
-            503,
-            "GRID_INITIALIZING"
-        );
+        throw new AppError("Pollution grid initializing. Please retry in a moment.", 503, "GRID_INITIALIZING");
     }
 
-    // 3. Validation (Delegated)
-    const { grid, meta } = validateGridData(rawGrid, rawMeta);
+    // 3. Validation
+    const { grid: validPayload, meta } = validateGridData(rawGrid, rawMeta);
 
-    // 4. Update Memory Cache
+    // 4. Reconstruct Float32Array from Base64
+    const buffer = Buffer.from(validPayload.data, 'base64');
+    const floatArray = new Float32Array(
+        buffer.buffer,
+        buffer.byteOffset,
+        buffer.length / Float32Array.BYTES_PER_ELEMENT
+    );
+
+    const reconstructedGrid: GridData = {
+        data: floatArray,
+        latStep: validPayload.latStep,
+        lngStep: validPayload.lngStep,
+        rows: validPayload.rows,
+        cols: validPayload.cols,
+    };
+
+    // 5. Update Memory Cache
     inMemoryGrid = {
-        grid: grid as GridData,
+        grid: reconstructedGrid,
         meta: meta as { builtAt: number; sensorQuality: string },
         cachedAt: Date.now(),
     };
 
     const ageMinutes = (Date.now() - meta.builtAt) / 60000;
-    const status =
-        ageMinutes > 90 ? "stale" :
-            ageMinutes > 60 || meta.sensorQuality === 'degraded' ? "aging" :
-                "fresh";
+    const status = ageMinutes > 90 ? "stale" : ageMinutes > 60 || meta.sensorQuality === 'degraded' ? "aging" : "fresh";
 
     if (status === "stale") {
         if (shouldTriggerRebuild()) triggerBackgroundRebuild();
@@ -171,7 +187,7 @@ export async function getPollutionGrid() {
     logInfo("grid_status", { status, age_minutes: ageMinutes });
 
     return {
-        grid: grid as GridData,
+        grid: reconstructedGrid,
         status,
         ageMinutes,
     };

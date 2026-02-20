@@ -1,7 +1,7 @@
 import { getChandigarhStations } from "@/modules/pollution/cpcbClient";
 import { estimatePollution } from "@/modules/grid/interpolation";
 import { CHANDIGARH_BOUNDARY, GRID_RESOLUTION_METERS } from "@/domain/city";
-import { GridCell, GridData } from "@/modules/grid/types";
+import { GridData } from "@/modules/grid/types";
 import { metersToLngDegrees, METERS_PER_DEGREE_LAT } from "./gridCalculator";
 import { logInfo } from "@/infrastructure/logger";
 
@@ -14,59 +14,42 @@ export async function computePollutionGrid() {
 
     const latStep = GRID_RESOLUTION_METERS / METERS_PER_DEGREE_LAT;
 
-    const rows = Math.ceil(
-        (CHANDIGARH_BOUNDARY.maxLat - CHANDIGARH_BOUNDARY.minLat) / latStep
-    );
+    // Calculate lngStep once based on the city's center latitude for a uniform matrix
+    const centerLat = (CHANDIGARH_BOUNDARY.minLat + CHANDIGARH_BOUNDARY.maxLat) / 2;
+    const lngStep = metersToLngDegrees(GRID_RESOLUTION_METERS, centerLat);
 
-    const cells: GridCell[][] = [];
+    const rows = Math.ceil((CHANDIGARH_BOUNDARY.maxLat - CHANDIGARH_BOUNDARY.minLat) / latStep);
+    const cols = Math.ceil((CHANDIGARH_BOUNDARY.maxLng - CHANDIGARH_BOUNDARY.minLng) / lngStep);
+    const totalCells = rows * cols;
+
+    // Allocate a flat binary buffer
+    const buffer = new Float32Array(totalCells);
 
     for (let row = 0; row < rows; row++) {
-        const lat =
-            CHANDIGARH_BOUNDARY.minLat + row * latStep;
-
-        const lngStep = metersToLngDegrees(
-            GRID_RESOLUTION_METERS,
-            lat
-        );
-
-        const cols = Math.ceil(
-            (CHANDIGARH_BOUNDARY.maxLng - CHANDIGARH_BOUNDARY.minLng) / lngStep
-        );
-
-        const rowCells: GridCell[] = [];
-
+        const lat = CHANDIGARH_BOUNDARY.minLat + row * latStep;
         for (let col = 0; col < cols; col++) {
-            const lng =
-                CHANDIGARH_BOUNDARY.minLng + col * lngStep;
+            const lng = CHANDIGARH_BOUNDARY.minLng + col * lngStep;
 
-            const pollutionValue = estimatePollution(
-                lat,
-                lng,
-                stations
-            );
+            const pollutionValue = estimatePollution(lat, lng, stations);
 
-            rowCells.push({
-                lat,
-                lng,
-                value: pollutionValue,
-            });
+            // Map 2D coordinates to a 1D index
+            buffer[row * cols + col] = pollutionValue;
         }
-
-        cells.push(rowCells);
     }
 
     const gridData: GridData = {
-        cells,
+        data: buffer,
         latStep,
-        rows: cells.length,
-        cols: cells[0].length,
+        lngStep,
+        rows,
+        cols,
     };
 
-    logInfo("grid_computed", { quality, cells: rows * cells[0].length });
+    logInfo("grid_computed", { quality, cells: totalCells });
 
     return {
         gridData,
         quality,
-        cellCount: rows * cells[0].length
+        cellCount: totalCells
     };
 }

@@ -1,12 +1,10 @@
 import { GridData } from "@/modules/grid/types";
-import { CHANDIGARH_BOUNDARY, GRID_RESOLUTION_METERS } from "@/domain/city";
+import { CHANDIGARH_BOUNDARY } from "@/domain/city";
 
 export const METERS_PER_DEGREE_LAT = 111000;
 
 export function metersToLngDegrees(meters: number, lat: number): number {
-    const metersPerDegreeLng =
-        111000 * Math.cos((lat * Math.PI) / 180);
-
+    const metersPerDegreeLng = 111000 * Math.cos((lat * Math.PI) / 180);
     return meters / metersPerDegreeLng;
 }
 
@@ -15,46 +13,34 @@ export function getGridValueAt(
     lng: number,
     grid: GridData
 ): number {
-    const { cells, latStep, rows, cols } = grid;
+    const { data, latStep, lngStep, rows, cols } = grid;
 
-    const rowFloat =
-        (lat - CHANDIGARH_BOUNDARY.minLat) / latStep;
+    const rowFloat = (lat - CHANDIGARH_BOUNDARY.minLat) / latStep;
+    const colFloat = (lng - CHANDIGARH_BOUNDARY.minLng) / lngStep;
 
     const row = Math.floor(rowFloat);
-    const yRatio = rowFloat - row;
+    const col = Math.floor(colFloat);
 
-    if (row < 0 || row >= rows - 1) {
+    // Bounds check
+    if (row < 0 || row >= rows - 1 || col < 0 || col >= cols - 1) {
         return 0;
     }
 
-    const lngStep = metersToLngDegrees(
-        GRID_RESOLUTION_METERS,
-        lat
-    );
-
-    const colFloat =
-        (lng - CHANDIGARH_BOUNDARY.minLng) / lngStep;
-
-    const col = Math.floor(colFloat);
+    const yRatio = rowFloat - row;
     const xRatio = colFloat - col;
 
-    if (col < 0 || col >= cols - 1) {
-        return 0;
-    }
-    const Q11 = cells[row][col].value;
-    const Q21 = cells[row][col + 1].value;
-    const Q12 = cells[row + 1][col].value;
-    const Q22 = cells[row + 1][col + 1].value;
+    // Helper to find 1D index
+    const idx = (r: number, c: number) => r * cols + c;
+
+    const Q11 = data[idx(row, col)];
+    const Q21 = data[idx(row, col + 1)];
+    const Q12 = data[idx(row + 1, col)];
+    const Q22 = data[idx(row + 1, col + 1)];
 
     // Interpolate horizontally
-    const top =
-        Q11 * (1 - xRatio) + Q21 * xRatio;
+    const top = Q11 * (1 - xRatio) + Q21 * xRatio;
+    const bottom = Q12 * (1 - xRatio) + Q22 * xRatio;
 
-    const bottom =
-        Q12 * (1 - xRatio) + Q22 * xRatio;
-
-    const interpolated =
-        top * (1 - yRatio) + bottom * yRatio;
-
-    return interpolated;
+    // Interpolate vertically
+    return top * (1 - yRatio) + bottom * yRatio;
 }
