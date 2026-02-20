@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { env } from "@/shared/env";
 
-export function proxy(req: NextRequest) {
+export function middleware(req: NextRequest) {
     if (req.nextUrl.pathname.startsWith("/api/internal")) {
         const token = req.headers.get("x-internal-token");
 
-        if (!token || token !== env.INTERNAL_API_SECRET) {
+        // Note: Using process.env directly here because Middleware runs on the Edge runtime, 
+        // and sometimes Zod validation (your env.ts) can cause edge-runtime build issues.
+        if (!token || token !== process.env.INTERNAL_API_SECRET) {
             return NextResponse.json(
                 { error: "Unauthorized" },
                 { status: 401 }
