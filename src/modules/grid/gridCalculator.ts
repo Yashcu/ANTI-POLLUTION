@@ -44,3 +44,50 @@ export function getGridValueAt(
     // Interpolate vertically
     return top * (1 - yRatio) + bottom * yRatio;
 }
+
+/**
+ * Extracts the top N most polluted grid cells and converts them 
+ * into GeoJSON MultiPolygon coordinates for the routing engine to avoid.
+ */
+export function getDynamicHotspots(grid: GridData, targetCount: number = 20): [number, number][][][] {
+    const { data, latStep, lngStep, rows, cols } = grid;
+
+    // 1. Gather all cells with their pollution values
+    const cells = [];
+    for (let row = 0; row < rows - 1; row++) {
+        for (let col = 0; col < cols - 1; col++) {
+            const val = data[row * cols + col];
+            if (val > 100) { // Only consider Unhealthy/Moderate cells
+                cells.push({ row, col, val });
+            }
+        }
+    }
+
+    // 2. Sort descending by pollution intensity
+    cells.sort((a, b) => b.val - a.val);
+
+    // 3. Take the worst offenders (ORS has polygon complexity limits, so we cap it)
+    const worstCells = cells.slice(0, targetCount);
+
+    // 4. Convert to GeoJSON Polygon format
+    const polygons: [number, number][][][] = [];
+
+    for (const cell of worstCells) {
+        const minLat = CHANDIGARH_BOUNDARY.minLat + cell.row * latStep;
+        const maxLat = minLat + latStep;
+        const minLng = CHANDIGARH_BOUNDARY.minLng + cell.col * lngStep;
+        const maxLng = minLng + lngStep;
+
+        // A GeoJSON Polygon is an array of LinearRings. 
+        // We push the 4 corners of the cell, closing the loop with the first point.
+        polygons.push([[
+            [minLng, minLat],
+            [maxLng, minLat],
+            [maxLng, maxLat],
+            [minLng, maxLat],
+            [minLng, minLat]
+        ]]);
+    }
+
+    return polygons;
+}
