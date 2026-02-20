@@ -38,63 +38,7 @@ const CHANDIGARH_HOLE: [number, number][] = [
   [CHANDIGARH_BOUNDARY.minLat, CHANDIGARH_BOUNDARY.minLng],
 ];
 
-/* ── AQI helpers ────────────────────────────────────────── */
-
-function aqiToColor(aqi: number): string {
-  if (aqi <= 50) return "#22c55e";
-  if (aqi <= 100) return "#eab308";
-  if (aqi <= 150) return "#f97316";
-  if (aqi <= 200) return "#ef4444";
-  return "#7f1d1d";
-}
-
-/* ── Segment builder from REAL backend data ─────────────── */
-
-interface ColoredSegment {
-  positions: [number, number][];
-  color: string;
-}
-
-function buildColoredSegmentsFromDetails(
-  details: { lat: number; lng: number; aqi: number }[]
-): ColoredSegment[] {
-  const segments: ColoredSegment[] = [];
-  if (!details || details.length < 2) return segments;
-
-  for (let i = 0; i < details.length - 1; i++) {
-    const p1 = details[i];
-    const p2 = details[i + 1];
-
-    const segmentAqi = Math.round((p1.aqi + p2.aqi) / 2);
-    const color = aqiToColor(segmentAqi);
-
-    const last = segments[segments.length - 1];
-    if (last && last.color === color) {
-      last.positions.push([p2.lat, p2.lng]);
-    } else {
-      segments.push({
-        positions: [[p1.lat, p1.lng], [p2.lat, p2.lng]],
-        color,
-      });
-    }
-  }
-
-  return segments;
-}
-
-/* ── Peak AQI finder ────────────────────────────────────── */
-
-function findPeakPoint(
-  pathDetails: { lat: number; lng: number; aqi: number }[]
-): { lat: number; lng: number; aqi: number } | null {
-  if (!pathDetails || pathDetails.length === 0) return null;
-
-  let peak = pathDetails[0];
-  for (const pt of pathDetails) {
-    if (pt.aqi > peak.aqi) peak = pt;
-  }
-  return peak;
-}
+import { buildColoredSegmentsFromDetails, findPeakPoint } from "./utils/mapHelpers";
 
 /* ── Custom Markers ─────────────────────────────────────── */
 
@@ -236,28 +180,29 @@ export default function MapWithRoute({ routes, selectedIndex, hoveredIndex }: Pr
         }}
       />
 
-      {/* ── Ghost routes (solid, rendered FIRST) ── */}
+      {/* ── Ghost routes (rendered FIRST so active route is on top) ── */}
       {routeData.map((rd, routeIdx) => {
         if (routeIdx === selectedIndex) return null;
 
         const isHovered = hoveredIndex === routeIdx;
 
-        return (
+        return rd.segments.map((seg, segIdx) => (
           <Polyline
-            key={`ghost-${routeIdx}`}
-            positions={rd.converted}
+            key={`ghost-${routeIdx}-${segIdx}`}
+            positions={seg.positions}
             pathOptions={{
-              color: isHovered ? "#475569" : "#9ca3af",
-              weight: isHovered ? 3 : 2,
-              opacity: isHovered ? 0.7 : 0.5,
+              color: seg.color,
+              weight: isHovered ? 5 : 4,
+              opacity: isHovered ? 0.6 : 0.35, // Faded colors
+              dashArray: "8, 10", // Dashed pattern to distinguish from active route
               lineCap: "round",
               lineJoin: "round",
             }}
           />
-        );
+        ));
       })}
 
-      {/* ── Active route — colored segments, NO hover tooltip ── */}
+      {/* ── Active route — vibrant, solid colored segments ── */}
       {routeData[selectedIndex]?.segments.map((seg, segIdx) => (
         <Polyline
           key={`active-${segIdx}`}
@@ -265,7 +210,7 @@ export default function MapWithRoute({ routes, selectedIndex, hoveredIndex }: Pr
           pathOptions={{
             color: seg.color,
             weight: 6,
-            opacity: 0.9,
+            opacity: 1, // Full opacity
             lineCap: "round",
             lineJoin: "round",
           }}

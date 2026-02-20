@@ -8,7 +8,6 @@ export { getGridValueAt } from "./gridCalculator";
 
 const GRID_KEY = "pollution:grid:data";
 const GRID_META_KEY = "pollution:grid:meta";
-const GRID_REBUILD_LOCK = "pollution:grid:rebuild:lock";
 
 const MEMORY_TTL_MS = 60_000;
 let inMemoryGrid: {
@@ -16,12 +15,6 @@ let inMemoryGrid: {
     meta: { builtAt: number; sensorQuality: string };
     cachedAt: number;
 } | null = null;
-
-let lastRebuildAttempt = 0;
-
-function shouldTriggerRebuild() {
-    return Date.now() - lastRebuildAttempt > 30_000;
-}
 
 export async function buildPollutionGrid() {
     try {
@@ -48,6 +41,7 @@ export async function buildPollutionGrid() {
 
         logInfo("grid_rebuild_success", { quality, cells: cellCount });
 
+        // Invalidate memory cache on the worker instance
         inMemoryGrid = null;
 
         return {
@@ -103,27 +97,6 @@ export async function getGridStatus() {
     return { status: "fresh", ageMinutes };
 }
 
-async function triggerBackgroundRebuild() {
-    if (!shouldTriggerRebuild()) return;
-
-    lastRebuildAttempt = Date.now();
-
-    const lock = await redis.set(GRID_REBUILD_LOCK, "1", {
-        nx: true,
-        ex: 300,
-    });
-
-    if (!lock) return;
-
-    buildPollutionGrid()
-        .catch((err) => {
-            logError("grid_rebuild_failed", { error: err instanceof Error ? err.message : err });
-        })
-        .finally(() => {
-            redis.del(GRID_REBUILD_LOCK);
-        });
-}
-
 export async function getPollutionGrid() {
     // 1. Check in-memory cache
     if (inMemoryGrid && Date.now() - inMemoryGrid.cachedAt < MEMORY_TTL_MS) {
@@ -144,10 +117,12 @@ export async function getPollutionGrid() {
     logInfo("redis_mget_grid", { latency_ms: Date.now() - startRedis });
 
     if (!rawGrid || !rawMeta) {
-        if (shouldTriggerRebuild()) {
-            triggerBackgroundRebuild();
-        }
-        throw new AppError("Pollution grid initializing. Please retry in a moment.", 503, "GRID_INITIALIZING");
+        // We NO LONGER trigger a rebuild here. The background cron job handles it.
+        throw new AppError(
+            "Pollution grid is currently initializing via background worker. Please retry in a moment.",
+            503,
+            "GRID_INITIALIZING"
+        );
     }
 
     // 3. Validation
@@ -179,12 +154,13 @@ export async function getPollutionGrid() {
     const ageMinutes = (Date.now() - meta.builtAt) / 60000;
     const status = ageMinutes > 90 ? "stale" : ageMinutes > 60 || meta.sensorQuality === 'degraded' ? "aging" : "fresh";
 
+    // If it's stale, we log it, but we still serve it instantly. 
+    // The cron job will pick up the update on its next 30-minute tick.
     if (status === "stale") {
-        if (shouldTriggerRebuild()) triggerBackgroundRebuild();
-        logWarn("using_stale_grid", { age_minutes: ageMinutes });
+        logWarn("serving_stale_grid", { age_minutes: ageMinutes });
+    } else {
+        logInfo("grid_status", { status, age_minutes: ageMinutes });
     }
-
-    logInfo("grid_status", { status, age_minutes: ageMinutes });
 
     return {
         grid: reconstructedGrid,
@@ -199,8 +175,6 @@ export async function getGridHealth() {
 
     return {
         status: gridExists ? "healthy" : "grid_missing",
-        grid_age_minutes: meta
-            ? (Date.now() - meta.builtAt) / 60000
-            : null,
+        grid_age_minutes: meta ? (Date.now() - meta.builtAt) / 60000 : null,
     };
 }

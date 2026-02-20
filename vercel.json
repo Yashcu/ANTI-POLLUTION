@@ -1,0 +1,8 @@
+{
+    "crons": [
+        {
+            "path": "/api/internal/build-grid",
+            "schedule": "*/30 * * * *"
+        }
+    ]
+}

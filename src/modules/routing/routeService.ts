@@ -23,6 +23,8 @@ export async function evaluateRoutes(
             [origin[1], origin[0]],
             [destination[1], destination[0]],
         ],
+        // Tell ORS to look for a drivable road up to 2km away from the exact coordinates
+        radiuses: [2000, 2000],
         alternative_routes: { target_count: 2, share_factor: 0.6 },
     };
 
@@ -36,6 +38,14 @@ export async function evaluateRoutes(
     );
 
     if (!standardRes.ok) {
+        const errData = await standardRes.json().catch(() => ({}));
+        logWarn("ors_upstream_error", { status: standardRes.status, errData });
+
+        // If ORS still can't find a road even with the 2km radius
+        if (standardRes.status === 404 || errData?.error?.code === 2010) {
+            throw new AppError("Could not find a driving road near the selected locations.", 404, "NO_ROUTABLE_POINT");
+        }
+
         throw new AppError("Routing service temporarily unavailable", 502, "ORS_UPSTREAM_ERROR");
     }
     const standardData: ORSRouteResponse = await standardRes.json();
@@ -51,6 +61,7 @@ export async function evaluateRoutes(
                 [origin[1], origin[0]],
                 [destination[1], destination[0]],
             ],
+            radiuses: [2000, 2000], // Add it here too!
             options: {
                 avoid_polygons: {
                     type: "MultiPolygon",
