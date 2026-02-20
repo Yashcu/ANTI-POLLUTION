@@ -76,7 +76,7 @@ function MapControls() {
   const map = useMap();
 
   return (
-    <div className="absolute bottom-6 right-6 z-[1000] flex flex-col gap-2">
+    <div className="absolute bottom-4 right-4 md:bottom-6 md:right-6 z-[1000] flex flex-col gap-2">
       <button
         onClick={() => map.zoomIn()}
         className="w-10 h-10 bg-white rounded-xl shadow-md shadow-black/10 flex items-center justify-center text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors"

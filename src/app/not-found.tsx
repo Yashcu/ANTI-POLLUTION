@@ -77,10 +77,10 @@ export default function NotFound() {
             </div>
 
             {/* Main Container */}
-            <div className="relative z-10 flex flex-col items-center max-w-2xl w-full">
+            <div className="relative z-10 flex flex-col lg:flex-row items-center justify-center max-w-5xl w-full gap-8 sm:gap-12 lg:gap-16 px-4">
 
                 {/* Animated Map Graphic */}
-                <div className="relative w-72 h-72 sm:w-96 sm:h-96 bg-white rounded-full shadow-[0_20px_60px_-15px_rgba(0,0,0,0.1)] border-8 border-slate-100 mb-12 flex items-center justify-center overflow-hidden">
+                <div className="relative w-52 h-52 sm:w-72 sm:h-72 lg:w-[400px] lg:h-[400px] bg-white rounded-full shadow-[0_20px_60px_-15px_rgba(0,0,0,0.1)] border-8 border-slate-100 flex items-center justify-center overflow-hidden z-0 shrink-0 mx-auto">
 
                     {/* Subtle Map Background Lines */}
                     <svg className="absolute inset-0 w-full h-full opacity-10 text-slate-800" viewBox="0 0 200 200">
@@ -151,8 +151,8 @@ export default function NotFound() {
                 </div>
 
                 {/* Text and Actions */}
-                <div className="text-center z-10 bg-white/70 p-8 rounded-3xl backdrop-blur-md border border-slate-100 shadow-xl shadow-slate-200/50 max-w-lg w-full">
-                    <div className="inline-block bg-sky-100/80 text-sky-700 font-semibold px-4 py-1.5 rounded-full text-xs sm:text-sm mb-5 tracking-wide border border-sky-200/50 uppercase shadow-sm">
+                <div className="text-center lg:text-left z-10 bg-white/80 p-6 sm:p-8 lg:p-10 rounded-3xl backdrop-blur-md border border-slate-100 shadow-xl shadow-slate-200/50 max-w-lg lg:max-w-xl w-full shrink-0 flex flex-col items-center lg:items-start mx-auto">
+                    <div className="inline-block bg-sky-100/80 text-sky-700 font-semibold px-4 py-1.5 rounded-full text-xs sm:text-sm mb-4 sm:mb-5 tracking-wide border border-sky-200/50 uppercase shadow-sm">
                         Recalculating Route...
                     </div>
                     <h1 className="text-4xl sm:text-5xl font-extrabold text-slate-800 mb-4 tracking-tight">

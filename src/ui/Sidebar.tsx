@@ -62,7 +62,7 @@ export default function Sidebar({ state, actions }: SidebarProps) {
     }
 
     return (
-        <div className="w-[360px] shrink-0 h-screen flex flex-col bg-white/80 backdrop-blur-xl border-r border-black/5 shadow-[20px_0_30px_-10px_rgba(0,0,0,0.03)] z-[1000] relative">
+        <div className="w-full md:w-[360px] shrink-0 h-full flex flex-col bg-white/80 backdrop-blur-xl md:border-r border-t md:border-t-0 border-black/5 md:shadow-[20px_0_30px_-10px_rgba(0,0,0,0.03)] z-[1000] relative">
             <div className="flex flex-col h-full overflow-hidden">
                 {/* ─── Header & Inputs ─── */}
                 <div className="p-5 pb-3 space-y-4 shrink-0">
