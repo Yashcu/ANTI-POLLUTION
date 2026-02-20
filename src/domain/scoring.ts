@@ -1,10 +1,13 @@
+import { RiskLevel, RouteGeometry } from "@/shared/types/route";
+
 export interface ScorableRoute {
     distance_km: number;
     duration_min: number;
     pollution_load_index: number;
     average_pollution: number;
-    risk_level: string;
-    route: { type: string; coordinates: number[][] };
+    risk_level: RiskLevel;
+    route: RouteGeometry;
+    path_details: { lat: number; lng: number; aqi: number }[];
 }
 
 export interface ScoredRoute extends ScorableRoute {

@@ -28,7 +28,8 @@ export async function POST(req: Request) {
       logInfo("route_request_start", { requestId });
 
       // Rate Limiting — sliding window, 20 req/min per IP
-      const ip = req.headers.get("x-forwarded-for") ?? "anonymous";
+      const forwarded = req.headers.get("x-forwarded-for");
+      const ip = forwarded?.split(",")[0].trim() || "unknown";
       const { success } = await ratelimit.limit(ip);
 
       if (!success) {
@@ -80,12 +81,7 @@ export async function POST(req: Request) {
       const { grid, status, ageMinutes } = await getPollutionGrid();
 
       if (status === "stale") {
-        throw new AppError(
-          "Pollution data unavailable or stale",
-          503,
-          "GRID_STALE",
-          { age_minutes: ageMinutes }
-        );
+        logInfo("serving_stale_grid", { age_minutes: ageMinutes });
       }
 
       const { routes: results, orsLatency } =

@@ -7,7 +7,6 @@ export type GridCell = {
 export type GridData = {
     cells: GridCell[][];
     latStep: number;
-    lngStep: number;
     rows: number;
     cols: number;
 };

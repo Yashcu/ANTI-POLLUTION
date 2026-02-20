@@ -22,4 +22,5 @@ export interface RouteModel {
     is_selected: boolean;
     is_fastest?: boolean;
     savings_tag?: string;
+    path_details: { lat: number; lng: number; aqi: number }[];
 }

@@ -1,4 +1,6 @@
-export function classifyAQI(value: number): string {
+import { RiskLevel } from "@/shared/types/route";
+
+export function classifyAQI(value: number): RiskLevel {
   if (value <= 50) return "Good";
   if (value <= 100) return "Moderate";
   if (value <= 150) return "Unhealthy for Sensitive Groups";

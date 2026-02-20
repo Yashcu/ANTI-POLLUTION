@@ -11,7 +11,6 @@ const gridCellSchema = z.object({
 export const gridDataSchema = z.object({
     cells: z.array(z.array(gridCellSchema)),
     latStep: z.number(),
-    lngStep: z.number(),
     rows: z.number(),
     cols: z.number(),
 });

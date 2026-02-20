@@ -6,6 +6,7 @@ import { ORSRouteResponse } from "@/shared/types/ors";
 import { AppError } from "@/shared/errors/AppError";
 import { env } from "@/shared/env";
 import { RouteRequest, RouteServiceResult } from "@/modules/routing/types";
+import { ScorableRoute } from "@/domain/scoring";
 
 export async function evaluateRoutes(
     input: RouteRequest & { grid: GridData }
@@ -69,7 +70,7 @@ export async function evaluateRoutes(
 
     const routes = data.features;
 
-    const results: any[] = [];
+    const results: ScorableRoute[] = [];
 
     for (const feature of routes) {
         const distanceKm = feature.properties.summary.distance / 1000;
@@ -77,8 +78,7 @@ export async function evaluateRoutes(
 
         const geometryCoords = feature.geometry.coordinates;
 
-        // Synchronous calculation now
-        const { totalExposure, averagePollution } =
+        const { totalExposure, averagePollution, pathDetails } =
             calculateRouteExposure(geometryCoords, grid);
 
         results.push({
@@ -88,6 +88,7 @@ export async function evaluateRoutes(
             average_pollution: Number(averagePollution.toFixed(2)),
             risk_level: classifyAQI(averagePollution),
             route: feature.geometry,
+            path_details: pathDetails,
         });
     }
 

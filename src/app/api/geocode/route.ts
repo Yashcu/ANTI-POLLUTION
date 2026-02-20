@@ -18,7 +18,8 @@ export async function POST(req: Request) {
 
     return requestContext.run({ requestId }, async () => {
         try {
-            const ip = req.headers.get("x-forwarded-for") ?? "anonymous";
+            const forwarded = req.headers.get("x-forwarded-for");
+            const ip = forwarded?.split(",")[0].trim() || "unknown";
             const { success } = await ratelimit.limit(ip);
 
             if (!success) {
@@ -30,7 +31,7 @@ export async function POST(req: Request) {
 
             const { query } = await req.json();
 
-            if (!query || typeof query !== "string") {
+            if (!query || typeof query !== "string" || query.length > 200) {
                 return NextResponse.json(
                     { error: "Location query required" },
                     { status: 400 }

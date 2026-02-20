@@ -3,8 +3,9 @@
 import { useState } from "react";
 import dynamic from "next/dynamic";
 import Sidebar from "@/ui/Sidebar";
-import { GridMeta, RouteModel } from "@/shared/types/route";
+import { RouteModel } from "@/shared/types/route";
 import { geocode, fetchRoutes } from "@/ui/api";
+import { GridMeta } from "@/modules/routing/types";
 
 type Status = "idle" | "loading" | "success" | "error";
 
@@ -23,6 +24,7 @@ export default function Home() {
 
   const [routes, setRoutes] = useState<RouteModel[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [gridMeta, setGridMeta] = useState<GridMeta | null>(null);
 
   const [status, setStatus] = useState<Status>("idle");
@@ -36,7 +38,6 @@ export default function Home() {
       const originData = await geocode(origin);
       const destData = await geocode(destination);
 
-      // Validate region
       const isOriginChandigarh = originData.label?.toLowerCase().includes("chandigarh");
       const isDestChandigarh = destData.label?.toLowerCase().includes("chandigarh");
 
@@ -87,11 +88,8 @@ export default function Home() {
   }
 
   return (
-    <div className="relative h-screen w-full overflow-hidden bg-slate-50">
-      <div className="absolute inset-0 z-0">
-        <MapWithRoute routes={routes} selectedIndex={selectedIndex} />
-      </div>
-
+    <div className="flex h-screen w-screen overflow-hidden">
+      {/* Sidebar — anchored flush left */}
       <Sidebar
         origin={origin}
         setOrigin={setOrigin}
@@ -101,12 +99,28 @@ export default function Home() {
         routes={routes}
         selectedIndex={selectedIndex}
         setSelectedIndex={setSelectedIndex}
+        onHoverRoute={setHoveredIndex}
         loading={status === "loading"}
         error={error}
         exposureSavedPercent={exposureSavedPercent}
         extraDistancePercent={extraDistancePercent}
         gridMeta={gridMeta}
       />
+
+      {/* Map — takes remaining width */}
+      <div className="flex-1 relative">
+        <MapWithRoute routes={routes} selectedIndex={selectedIndex} hoveredIndex={hoveredIndex} />
+
+        {/* Apple Style Floating Capsule */}
+        <div className="absolute top-6 left-1/2 -translate-x-1/2 z-[1000] pointer-events-none">
+          <div className="bg-white/70 backdrop-blur-xl border border-white/40 shadow-sm rounded-full px-4 py-1.5 flex items-center gap-2">
+            <div className="w-1.5 h-1.5 rounded-full bg-[#34C759]" />
+            <span className="text-[13px] font-medium tracking-[-0.08px] text-black/70">
+              Optimized for the Chandigarh Metropolitan Region
+            </span>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

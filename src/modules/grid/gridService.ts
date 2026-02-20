@@ -37,6 +37,8 @@ export async function buildPollutionGrid() {
 
         logInfo("grid_rebuild_success", { quality, cells: cellCount });
 
+        inMemoryGrid = null;
+
         return {
             cellCount,
             status: quality,

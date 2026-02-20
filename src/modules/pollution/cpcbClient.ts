@@ -16,7 +16,8 @@ const HARD_CUTOFF_MS = 180 * 60 * 1000;       // 180 min
 const cpcbBreaker = new CircuitBreaker("CPCB", 5, 30_000);
 
 function parseCPCBDate(dateStr: string): number {
-    // Expected format: "DD-MM-YYYY HH:mm:ss"
+    if (!dateStr || !dateStr.includes(" ") || !dateStr.includes("-")) return NaN;
+
     const [datePart, timePart] = dateStr.split(" ");
     const [day, month, year] = datePart.split("-");
     const [hour, minute, second] = timePart.split(":");

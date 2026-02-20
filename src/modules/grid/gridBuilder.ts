@@ -58,7 +58,6 @@ export async function computePollutionGrid() {
     const gridData: GridData = {
         cells,
         latStep,
-        lngStep: GRID_RESOLUTION_METERS / METERS_PER_DEGREE_LAT, // approx
         rows: cells.length,
         cols: cells[0].length,
     };

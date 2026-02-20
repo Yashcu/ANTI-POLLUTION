@@ -4,6 +4,7 @@ import { CachedRoutePayload } from "@/modules/routing/types";
 const ROUTE_TTL_SECONDS = 60 * 20;
 
 const MEMORY_TTL_MS = 60_000;
+const MAX_MEMORY_ENTRIES = 500;
 
 const memoryRouteCache = new Map<string, {
     payload: CachedRoutePayload;
@@ -41,6 +42,8 @@ export async function getCachedRoute(key: string) {
 }
 
 export async function setCachedRoute(key: string, payload: CachedRoutePayload) {
+    if (memoryRouteCache.size >= MAX_MEMORY_ENTRIES) memoryRouteCache.clear();
+
     memoryRouteCache.set(key, {
         payload,
         cachedAt: Date.now()
